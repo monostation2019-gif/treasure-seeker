@@ -1,17 +1,16 @@
-{
-  "name": "Treasure Seeker | 伊勢のお宝探し",
-  "short_name": "TreasureSeeker",
-  "description": "伊勢のまちに落ちているゴミを『宝物』として発見・記録するゲーミフィケーションアプリ",
-  "start_url": "./index.html",
-  "scope": "./",
-  "display": "standalone",
-  "orientation": "portrait",
-  "background_color": "#F3EEDF",
-  "theme_color": "#4E6B4A",
-  "lang": "ja",
-  "icons": [
-    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
-  ]
-}
+/* ============================================================
+   Treasure Seeker - Firebase初期化
+   このファイルの役目は「接続を作って渡すだけ」。
+   ここにビジネスロジック（発見保存やランキング集計など）は書きません。
+   初期化が複数箇所で走ってしまう事故を防ぐのが目的です。
+   ============================================================ */
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getFirestore } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { firebaseConfig } from './config.js';
+
+// ★ Firebase Storageは使いません。2024年10月以降、新規プロジェクトでのバケット作成に
+//   Blazeプラン（クレジットカード登録）が必須になったため、画像はJPEG圧縮＋Base64化して
+//   Firestoreのドキュメントに直接保存する方式にしています（Sparkプランのままで運用可能）。
+
+const app = initializeApp(firebaseConfig);
+export const db = getFirestore(app);
