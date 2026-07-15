@@ -19,17 +19,42 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="shared/firebase-config.js"></script>
 <script>
-  // index.html はエントリーポイント専用。ログイン状態に応じて振り分けるだけにして、
-  // 重いUIコードを持たせないことでSafariでの初期クラッシュを防ぐ。
-  auth.onAuthStateChanged((user) => {
-    window.location.replace(user ? "home.html" : "login.html");
-  });
-  // 万一onAuthStateChangedが応答しない場合のフォールバック
+  // フォールバック用タイマーは、下の認証処理でエラーが起きても必ず動くように
+  // 別のscriptブロックとして独立させておく（1つのscript内でエラーが起きると
+  // 同じブロック内の後続コードが実行されなくなるため）。
   setTimeout(() => {
-    if (document.querySelector(".loading-screen")) {
-      window.location.replace("login.html");
+    const loading = document.querySelector(".loading-screen");
+    if (loading && !window.__TS_ISE_REDIRECTED__) {
+      const msg = loading.querySelector(".msg");
+      if (window.__TS_ISE_CONFIG_OK__ === false) {
+        if (msg) msg.textContent = "Firebaseの設定が未入力のため起動できません（上の赤い帯を確認してください）";
+      } else {
+        if (msg) msg.textContent = "接続できませんでした。ログイン画面に移動します…";
+        window.location.replace("login.html");
+      }
     }
   }, 4000);
+</script>
+<script>
+  // index.html はエントリーポイント専用。ログイン状態に応じて振り分けるだけにして、
+  // 重いUIコードを持たせないことでSafariでの初期クラッシュを防ぐ。
+  try {
+    if (window.__TS_ISE_CONFIG_OK__ === false) {
+      // 設定未入力バナーはfirebase-config.js側で表示済みなのでここでは何もしない
+    } else {
+      auth.onAuthStateChanged(
+        (user) => {
+          window.__TS_ISE_REDIRECTED__ = true;
+          window.location.replace(user ? "home.html" : "login.html");
+        },
+        (err) => {
+          console.error("認証状態の確認に失敗:", err);
+        }
+      );
+    }
+  } catch (e) {
+    console.error("Firebase初期化エラー:", e);
+  }
 </script>
 </body>
 </html>
