@@ -173,6 +173,11 @@ button{ font-family:inherit; border:none; background:none; cursor:pointer; -webk
   width:100%; background:#fff; color:var(--danger); font-weight:700;
   padding:14px; border-radius:16px; font-size:14px; margin-top:10px; border:2px solid var(--danger);
 }
+.btn-undo-link{
+  display:block; width:100%; text-align:center; margin-top:14px;
+  color:var(--ink-soft); font-size:12.5px; text-decoration:underline; font-weight:500;
+}
+.btn-undo-link:active{ opacity:.6; }
 
 /* ---------- ゴミ種別選択 ---------- */
 .type-grid{
@@ -356,6 +361,7 @@ button{ font-family:inherit; border:none; background:none; cursor:pointer; -webk
 
         <button class="btn-primary" id="btn-open-share">📤&nbsp;Instagramでシェアする</button>
         <button class="btn-secondary" id="btn-back-to-map">地図に戻る</button>
+        <button class="btn-undo-link" id="btn-undo-discovery">間違えた場合はここから取り消す</button>
       </div>
     </div>
   </div>
@@ -416,7 +422,7 @@ const firebaseConfig = {
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
-  getFirestore, collection, addDoc, doc, setDoc, query, where, getDocs,
+  getFirestore, collection, addDoc, doc, setDoc, deleteDoc, query, where, getDocs,
   GeoPoint, serverTimestamp, limit, Timestamp, getCountFromServer
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 // ★ Firebase Storageは使いません（2024年10月以降、新規プロジェクトでのバケット作成に
@@ -647,7 +653,7 @@ const steps = ['step-gps','step-dup-check','step-dup-found','step-type-select','
 
 let flowState = {
   photoDataUrl:null, lat:null, lng:null, gridId:null,
-  wasteType:null, collected:false, dupDocSnap:null
+  wasteType:null, collected:false, dupDocSnap:null, lastDiscoveryId:null
 };
 
 function showStep(id){
@@ -657,7 +663,7 @@ function showStep(id){
 function openFlow(){ flowOverlay.classList.remove('hidden'); }
 function closeFlow(){
   flowOverlay.classList.add('hidden');
-  flowState = { photoDataUrl:null, lat:null, lng:null, gridId:null, wasteType:null, collected:false, dupDocSnap:null };
+  flowState = { photoDataUrl:null, lat:null, lng:null, gridId:null, wasteType:null, collected:false, dupDocSnap:null, lastDiscoveryId:null };
   document.getElementById('collected-check').checked = false;
   document.getElementById('btn-submit-discovery').disabled = true;
   document.querySelectorAll('.type-chip.selected').forEach(el=>el.classList.remove('selected'));
@@ -798,25 +804,34 @@ document.getElementById('btn-submit-discovery').addEventListener('click', async 
   showStep('step-uploading');
 
   try{
-    const countBefore = await getMyStampCount();
+    // ★ 体感速度対策：以前は「件数取得 → discoveries書き込み → discoveryPhotos書き込み」を
+    //   順番に待っていたため、モバイル回線だと3回分の往復時間がそのまま待ち時間になっていました。
+    //   discoveryRefのIDを先に採番してしまえば3つとも並行して投げられるので、
+    //   実質1往復分の時間まで短縮できます（離脱防止）。
+    const discoveryRef = doc(collection(db,'discoveries'));
 
-    // ★ discoveries（座標・種別など軽量な情報のみ）と
-    //   discoveryPhotos（Base64画像のみ、docIdをdiscoveriesと揃える）を分けて保存します。
-    //   こうすることで、地図のピン一覧を取得するときに毎回画像データまで
-    //   ダウンロードしてしまうのを防ぎ、Firestoreの無料枠（読み取り件数・転送量）を守ります。
-    const discoveryRef = await addDoc(collection(db,'discoveries'), {
-      anonId: ANON_ID,
-      location: new GeoPoint(flowState.lat, flowState.lng),
-      gridId: flowState.gridId,
-      wasteType: flowState.wasteType,
-      hasImage: true,
-      collected: !!flowState.collected,
-      createdAt: serverTimestamp()
-    });
+    const [countBefore] = await Promise.all([
+      getMyStampCount(),
+      setDoc(discoveryRef, {
+        anonId: ANON_ID,
+        location: new GeoPoint(flowState.lat, flowState.lng),
+        gridId: flowState.gridId,
+        wasteType: flowState.wasteType,
+        hasImage: true,
+        collected: !!flowState.collected,
+        createdAt: serverTimestamp()
+      }),
+      // discoveries（座標・種別など軽量な情報のみ）と
+      // discoveryPhotos（Base64画像のみ、docIdをdiscoveriesと揃える）を分けて保存します。
+      // こうすることで、地図のピン一覧を取得するときに毎回画像データまで
+      // ダウンロードしてしまうのを防ぎ、Firestoreの無料枠（読み取り件数・転送量）を守ります。
+      setDoc(doc(db, 'discoveryPhotos', discoveryRef.id), {
+        imageDataUrl: flowState.photoDataUrl
+      })
+    ]);
 
-    await setDoc(doc(db, 'discoveryPhotos', discoveryRef.id), {
-      imageDataUrl: flowState.photoDataUrl
-    });
+    // 間違えた場合の取り消しボタン用に、今回登録したdiscoveryのIDを覚えておく
+    flowState.lastDiscoveryId = discoveryRef.id;
 
     const countAfter = countBefore + 1;
     const prevRank = getRank(countBefore);
@@ -845,6 +860,33 @@ document.getElementById('btn-submit-discovery').addEventListener('click', async 
 });
 
 document.getElementById('btn-back-to-map').addEventListener('click', closeFlow);
+
+// 登録直後の「間違えた」を取り消すボタン
+document.getElementById('btn-undo-discovery').addEventListener('click', async ()=>{
+  const targetId = flowState.lastDiscoveryId;
+  if(!targetId) return;
+
+  const ok = confirm('この発見記録を取り消します。よろしいですか？');
+  if(!ok) return;
+
+  const btn = document.getElementById('btn-undo-discovery');
+  btn.textContent = '取り消しています…';
+
+  try{
+    await Promise.all([
+      deleteDoc(doc(db, 'discoveries', targetId)),
+      deleteDoc(doc(db, 'discoveryPhotos', targetId))
+    ]);
+    showToast('取り消しました');
+    refreshHeaderRank();
+    loadNearbyDiscoveries();
+    closeFlow();
+  }catch(err){
+    console.error('undo failed', err);
+    showToast('取り消しに失敗しました。通信環境を確認してもう一度お試しください。');
+    btn.textContent = '間違えた場合はここから取り消す';
+  }
+});
 
 // ---------- シェア機能 ----------
 const shareModal = document.getElementById('share-modal');
