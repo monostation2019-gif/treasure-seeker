@@ -1,137 +1,93 @@
-# Treasure Seeker セットアップ手順
+# トレジャーシーカー伊勢
 
-このフォルダには以下が入っています。
+「伊勢の未来をピカピカに」をコンセプトにした、伊勢市のゴミ拾い・資源回収・地域ランキングPWAです。
+既存の「伊勢まちみっけ」の反省点（単一ファイル構成によるSafariクラッシュ）を踏まえ、
+**ページごとにファイルを分割**した構成にしています。
 
-```
-treasure-seeker/
-├─ index.html      … アプリ本体（これ1ファイルでほぼ全機能が動きます）
-├─ manifest.json   … PWA設定
-├─ sw.js           … Service Worker（オフラインキャッシュ・更新制御）
-├─ icons/          … アプリアイコン置き場（★自分で用意する必要あり）
-└─ README.md       … このファイル
-```
-
-まちみっけとは別のFirebaseプロジェクトとして立ち上げる前提の手順です。
-
-### ★重要：Firebase Storageは使いません
-
-2024年10月以降、Firebaseは新規プロジェクトで Cloud Storage を使う場合に **Blazeプラン（従量課金プラン・クレジットカード登録）への切り替えを必須**にしました。無料枠自体は維持されるものの、カード登録を避けたい場合はStorageを使わない設計にする必要があります。
-
-そこでTreasure Seekerでは、撮影した写真をその場でJPEG圧縮＋Base64化し、Firestoreのドキュメントに直接保存する方式にしています（まちみっけの初期構築と同じ考え方です）。これにより **Sparkプラン（無料・カード登録不要）のまま、Firestoreだけで運用できます**。
-
-- 地図表示・重複チェック・スタンプ集計に使う `discoveries` コレクションには画像を含めません（軽量に保つため）
-- 画像本体は `discoveryPhotos` コレクション（idは`discoveries`と同じ）に分けて保存します
-- 1件あたりの画像は圧縮後おおよそ数百KB程度に収まるよう自動調整されます（Firestoreの1ドキュメント1MB制限に対応）
-
----
-
-## 1. Firebaseプロジェクトを新規作成する
-
-1. https://console.firebase.google.com/ を開き、「プロジェクトを追加」
-2. プロジェクト名は例えば `treasure-seeker` など、まちみっけと区別できる名前にする
-3. Googleアナリティクスは任意（不要ならOFFでよい）
-
-## 2. Firestore Database を有効化する（Storageは触らない）
-
-1. 左メニュー「構築」→「Firestore Database」→「データベースの作成」
-2. ロケーションは `asia-northeast1`（東京）を推奨
-3. 開始時は「テストモードで開始」でOK（後で下記のルールに置き換えます）
-4. **「Storage」のメニューには入らないでください**。Storageの初期設定（バケット作成）に触れると、その時点でBlazeプランへのアップグレードを求められることがあります。Treasure SeekerはStorageを一切使わないので、そのままでOKです。
-
-もしFirestoreデータベースの作成自体で同様のBilling要求が出た場合は、一度プロジェクトを作り直す（Analyticsをオフにする、リージョンを変える等）か、時間を置いて再試行してみてください。それでも解消しない場合は教えてください。
-
-## 3. Webアプリを登録し、SDK設定値を取得する
-
-1. プロジェクト概要の「</> (Web)」アイコンをクリックしてWebアプリを追加
-2. アプリのニックネームは任意（例: treasure-seeker-web）
-3. 表示された `firebaseConfig` の中身（apiKey, authDomain, projectId, storageBucket, messagingSenderId, appId）をコピー
-   - `storageBucket` の値は使いませんが、コピーしておいて問題ありません
-4. `index.html` を開き、`firebaseConfig` の該当箇所（`YOUR_API_KEY` など）を実際の値に書き換えて保存
-
-## 4. Firestoreセキュリティルールを設定する
-
-Firebaseコンソール → Firestore Database → 「ルール」タブで、以下に置き換えてください。`discoveries`（軽量データ）と `discoveryPhotos`（画像データ）の2コレクション分のルールです。
+## ファイル構成
 
 ```
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-
-    match /discoveries/{docId} {
-      allow read: if true;
-
-      allow create: if
-        request.resource.data.keys().hasAll(['anonId','location','gridId','wasteType','createdAt'])
-        && request.resource.data.anonId is string
-        && request.resource.data.wasteType is string
-        && request.resource.data.gridId is string;
-
-      // MVPでは投稿の編集・削除は許可しない（Phase2で検討）
-      allow update, delete: if false;
-    }
-
-    match /discoveryPhotos/{docId} {
-      allow read: if true;
-
-      allow create: if
-        request.resource.data.keys().hasAll(['imageDataUrl'])
-        && request.resource.data.imageDataUrl is string
-        && request.resource.data.imageDataUrl.size() < 900000; // 約900KBまで
-
-      allow update, delete: if false;
-    }
-  }
-}
+treasure-seeker-ise/
+├── index.html          # エントリーポイント（ログイン状態で振り分けのみ／重い処理なし）
+├── login.html          # ログイン（Google / Apple / ゲスト）
+├── home.html           # ホーム（今日の状況・トップユーザー・機能一覧）
+├── map.html            # さんぽ＆クリーンマップ（Leaflet地図・発見登録）
+├── ranking.html        # 地域別環境ランキング（今日／累計）
+├── mypage.html         # マイページ（プロフィール・資源回収履歴・ログアウト）
+├── manifest.webmanifest
+├── firestore.rules     # Firestoreセキュリティルール（新コレクション構造用）
+└── shared/
+    ├── firebase-config.js  # ★ここにFirebase設定値を入れてください
+    ├── style.css           # 共通デザイントークン・UI
+    └── app-common.js       # 認証ガード・ボトムナビ・カテゴリ定義・GSI逆ジオコーディング等
 ```
 
-## 5. Firestoreの複合インデックスを作成する（初回投稿テスト時）
+各ページは自己完結していて、共通処理だけ `shared/` から読み込む構成です。
+1ページが重くなってもSafariが他ページごとクラッシュすることがなくなります。
 
-重複チェック機能は `gridId`（等価）と `createdAt`（範囲）の両方で検索するため、複合インデックスが必要です。
+## 1. Firebaseの設定（既存プロジェクトへ上書きする場合）
 
-- 初めてアプリで発見報告を試したとき、ブラウザのコンソール（開発者ツール）にFirestoreからのエラーメッセージと一緒に「インデックスを作成」というリンクが表示されます。
-- そのリンクをクリックするだけで自動的に必要なインデックスが作成されます（数分で反映）。
-- リンクが出てから投稿がうまくいくまで少し時間がかかることがあるので、慌てず数分待ってから再テストしてください。
+「トレジャーシーカー伊勢」用に新規作成したプロジェクトがうまく動かなかったとのことなので、
+**既存の「伊勢まちみっけ」Firebaseプロジェクトを使う**手順で説明します。
 
-## 6. アイコン画像を用意する
+1. [Firebase Console](https://console.firebase.google.com/) → 既存プロジェクトを開く
+2. 左メニュー「Authentication」→「Sign-in method」で以下を有効化
+   - **Google**（ワンクリックで有効化可）
+   - **Apple**（Apple Developer Programの有効な契約と、Services ID／Key設定が必要。詳細は [Firebase公式Apple連携ガイド](https://firebase.google.com/docs/auth/web/apple) を参照）
+   - **匿名（Anonymous）**（ゲストログイン用）
+3. 「Authentication」→「Settings」→「承認済みドメイン」に、Vercelのデプロイ先ドメイン（例: `your-app.vercel.app`）を追加
+4. 「プロジェクトの設定」（歯車アイコン）→「全般」→「マイアプリ」→ 既存のWebアプリの設定値をコピー
+5. `shared/firebase-config.js` の `firebaseConfig` オブジェクトに貼り付け
 
-`icons/` フォルダに以下のファイルを置いてください（PNG形式）。
+```js
+const firebaseConfig = {
+  apiKey: "実際の値",
+  authDomain: "実際の値",
+  projectId: "実際の値",
+  storageBucket: "実際の値",
+  messagingSenderId: "実際の値",
+  appId: "実際の値",
+};
+```
 
-- `icon-192.png`（192×192px）
-- `icon-512.png`（512×512px）
-- `icon-maskable-512.png`（512×512px、周囲に余白を持たせたセーフゾーン対応版）
+## 2. Firestoreのコレクション構造（新規）
 
-まだ用意がなければ、レーザー彫刻用に作った親方キャラの素材を流用したり、Canvaなどで仮アイコンを作ってひとまず動作確認を優先してもOKです。
+ご相談のとおり、コレクション構造は一新しています。
 
-## 7. GitHub + Vercelでデプロイする
+| コレクション | 内容 |
+|---|---|
+| `users/{uid}` | プロフィール、累計発見数、環境貢献度スコア |
+| `finds/{id}` | 1件の発見記録（カテゴリ・座標・町名・サイズ・作成日時）。写真は含まない |
+| `findPhotos/{id}` | `finds` と同じIDで紐づく写真（base64、遅延読み込み用に分離） |
 
-1. このフォルダの中身をGitHubの新規リポジトリ（例: `treasure-seeker`）にpush
-2. Vercelで「Add New Project」→ そのリポジトリをImport
-3. Framework Presetは「Other」でOK（静的ファイルのみのため、ビルドコマンドは空欄）
-4. Deployするとサブドメイン（例: `treasure-seeker.vercel.app`）が発行されます
+写真を`finds`本体に含めず`findPhotos`に分離しているのは、既存アプリで効果のあった
+「一覧表示時は写真を読み込まず、詳細を開いたときだけ取得する」軽量化パターンを踏襲しているためです。
 
-## 8. 動作確認チェックリスト
+### Firestoreの初期設定手順
+1. 「Firestore Database」→ 既存のデータベースがあればそのまま利用可（コレクションは自動作成されます）
+2. 「ルール」タブに `firestore.rules` の内容を貼り付けて公開
+3. 一覧表示のクエリ（`orderBy("createdAt")` と `where` の組み合わせ）でインデックス要求のエラーが出た場合、
+   Firebaseがコンソールに表示するリンクをクリックすれば自動でインデックスが作成されます
 
-- [ ] スマホ実機でアクセスし、地図が3秒以内に表示されるか
-- [ ] 「📷 宝物を発見する」からカメラが起動するか
-- [ ] 位置情報の許可ダイアログが出て、GPSが取得できるか
-- [ ] 発見報告後、地図にピンが追加され、スタンプ数が増えるか
-- [ ] 同じ場所で連続投稿すると「発見済みのエリア」表示になるか
-- [ ] ランクアップ時に紙吹雪演出が出るか（5個到達で「一人前シーカー」になります）
-- [ ] Instagramシェア画像が生成され、共有 or 保存できるか
-- [ ] ホーム画面に追加してPWAとして起動できるか（Safariの「共有」→「ホーム画面に追加」）
+## 3. カテゴリ
 
-## 9. 今後の拡張候補（Phase 2以降・今回は未実装）
+`shared/app-common.js` の `CATEGORIES` で一元管理しています。表示名・アイコン・色を変えたい場合はここだけ編集すれば全ページに反映されます。
 
-- 発見履歴のマイページ表示（自分の投稿一覧）
-- オフライン時の投稿キュー（電波復帰後の自動送信）
-- 地図表示範囲(bounds)に応じたクエリの絞り込み（投稿数が増えてきたら対応）
-- 学区別・町別ランキング（まちみっけの`GAKKU_MAP`資産を流用可能）
-- 投稿数が増えて無料枠（Firestore: 読み取り5万回/日・書き込み2万回/日・ストレージ1GiB）が気になってきたら、その時点でBlazeプランへの切り替え＋予算アラート設定を検討する
+現在の設定：ペットボトル／たばこ吸い殻／空き缶／プラスチック／危険物／その他
 
-## 補足：それでもBillingを求められる場合
+## 4. デプロイ（Vercel）
 
-Firestoreのデータベース作成自体でもBilling要求が出るケースが稀に報告されています。その場合は以下を試してください。
+このプロジェクトは静的ファイルのみなので、`treasure-seeker-ise` フォルダをそのままVercelにデプロイできます。
+ビルドコマンドは不要（Static/Other プロジェクトとして認識されます）。
 
-1. 数分〜半日ほど時間を置いて再試行する（一時的なシステム側の反映遅延であることがあります）
-2. 別リージョン（例: `us-central1`）で試してみる
-3. どうしても解消しない場合は、Firebase以外の無料BaaS（Supabase等）への切り替えも選択肢に入りますが、その場合はアプリ側のデータ層をまるごと作り直す必要があるため、まずは1〜2を試すのがおすすめです
+## 5. 今後の拡張ポイント
+
+- **アイコン画像**: `manifest.webmanifest` が参照する `icons/icon-192.png` `icons/icon-512.png` はまだ用意していません。添付画像のロゴ（鳥居＋虫眼鏡＋葉）を元にアイコン画像を作成し `icons/` フォルダに配置してください。
+- **admin.html**: 既存アプリと同様の管理画面が必要であれば、`finds`/`users` コレクションを一覧・編集できるページを追加できます。
+- **Service Worker**: オフライン対応やプッシュ通知が必要になったら `sw.js` を追加してください（現状はFirestoreのオフラインキャッシュのみ有効）。
+- **町別ランキングの累計表示**: 現状は「累計」タブで町別ランキングを省略しています（`finds`全件走査を避けるため）。必要であれば `towns/{townName}` に集計ドキュメントを持たせ、発見登録時にインクリメントする設計に拡張できます。
+
+## 動作確認の仕方（Firebase未設定でもUIだけ確認したい場合）
+
+`shared/firebase-config.js` にプレースホルダーの値が入ったままだと、`firebase.initializeApp` の時点でエラーになりログイン画面より先に進めません。
+まずは実際のFirebase設定値を入れてから動作確認してください。

@@ -1,0 +1,33 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ユーザープロフィール：本人のみ書き込み可、閲覧はログイン済みなら誰でも可（ランキング表示用）
+    match /users/{uid} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && request.auth.uid == uid;
+      allow update: if request.auth != null && request.auth.uid == uid;
+      allow delete: if false;
+    }
+
+    // 発見記録：作成は本人のみ、閲覧はログイン済みなら誰でも可（マップ・ランキング表示用）
+    // 改ざん防止のため uid は作成時の本人IDと一致必須、作成後の編集・削除は不可（誤操作以外は原則不可）
+    match /finds/{findId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+                    && request.resource.data.uid == request.auth.uid
+                    && request.resource.data.category is string
+                    && request.resource.data.lat is number
+                    && request.resource.data.lng is number;
+      allow update, delete: if request.auth != null
+                    && resource.data.uid == request.auth.uid;
+    }
+
+    // 写真：findsと同じIDで紐付け。閲覧はログイン済みなら可、書き込みは対応するfindsの持ち主のみ
+    match /findPhotos/{findId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+                    && get(/databases/$(database)/documents/finds/$(findId)).data.uid == request.auth.uid;
+    }
+  }
+}
