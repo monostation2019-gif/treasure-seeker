@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ログイン | トレジャーシーカー伊勢</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@600;700&family=Zen+Maru+Gothic:wght@400;500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+<style>
+  body{ padding-bottom:0; } /* ログイン画面は下部ナビなし */
+</style>
+</head>
+<body>
+
+<div class="login-screen">
+
+  <div class="login-brand">
+    <svg class="torii-mark" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M6 14 L42 14" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+      <path d="M9 9 L39 9" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+      <path d="M13 9 L13 40" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+      <path d="M35 9 L35 40" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+      <path d="M22 14 L22 30" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
+      <path d="M26 14 L26 30" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
+    </svg>
+    <h1>トレジャーシーカー伊勢</h1>
+    <p>見つけて、記録して、伊勢の未来をきれいに。</p>
+  </div>
+
+  <div class="login-panel">
+    <div class="panel-inner">
+      <div class="panel-title">アカウントで始める</div>
+
+      <div class="login-buttons">
+        <button class="btn btn-google" id="btn-google">
+          <svg class="btn-icon" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.6-6 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l6-6C34.6 5.1 29.6 3 24 3 12.4 3 3 12.4 3 24s9.4 21 21 21 21-9.4 21-21c0-1.4-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 15.9 18.9 13 24 13c3.1 0 5.9 1.2 8 3.1l6-6C34.6 5.1 29.6 3 24 3c-7.5 0-14 4.2-17.7 10.7z"/><path fill="#4CAF50" d="M24 45c5.5 0 10.4-1.9 14.2-5.1l-6.6-5.4C29.6 36.5 26.9 37 24 37c-5.2 0-9.6-3.3-11.3-8l-6.6 5.1C9.9 40.7 16.4 45 24 45z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.2 5.7l6.6 5.4C41.9 35.6 45 30.2 45 24c0-1.4-.1-2.4-.4-3.5z"/></svg>
+          Googleでログイン
+        </button>
+
+        <button class="btn btn-apple" id="btn-apple">
+          <svg class="btn-icon" viewBox="0 0 384 512" fill="#fff"><path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C60.9 141 0 184.5 0 273.1c0 26.2 4.8 53.3 14.4 81.2 12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-57.7-89.9-57.7-91.5zM255.9 88.7c26.5-31.5 24.1-60.1 23.4-70.7-23.6 1.4-51 16.4-66.6 34.8-17.2 19.7-27.3 44.1-25.2 70.9 24.9 1.9 47.6-11.7 68.4-35z"/></svg>
+          Appleでログイン
+        </button>
+
+        <button class="btn btn-guest" id="btn-guest">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg>
+          ゲストとして試す
+        </button>
+      </div>
+
+      <div class="login-note">
+        ログインすることで、発見したゴミの位置情報や記録が<br>
+        伊勢の環境マップづくりに活用されます。
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ユーザー名設定シート(初回ログイン時のみ表示) -->
+<div class="modal-backdrop" id="username-modal" style="display:none;">
+  <div class="modal-sheet">
+    <h3 style="margin-bottom:4px;">ようこそ！</h3>
+    <p style="font-size:13px;color:var(--sumi-soft);margin:0 0 16px;">マップやランキングに表示する名前を決めてください。</p>
+    <label class="field-label" for="username-input">ユーザー名</label>
+    <input type="text" id="username-input" class="text-input" placeholder="例：伊勢の親方" maxlength="12">
+    <div class="field-hint" id="username-hint">2〜12文字（他の人と重複できません）</div>
+    <button class="btn btn-primary" id="btn-confirm-username" style="margin-top:16px;" disabled>この名前で始める</button>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="js/firebase-config.js"></script>
+<script src="js/util.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+
+let pendingUser = null; // ユーザー名未設定のまま待機中のFirebaseユーザー
+
+function setButtonsDisabled(disabled) {
+  ["btn-google", "btn-apple", "btn-guest"].forEach(id => $(id).disabled = disabled);
+}
+
+async function afterSignIn(user) {
+  try {
+    const userDoc = await db.collection("users").doc(user.uid).get();
+    if (userDoc.exists) {
+      location.replace("home.html");
+      return;
+    }
+    // 初回ログイン → ユーザー名を決めてもらう
+    pendingUser = user;
+    openUsernameModal();
+  } catch (err) {
+    console.error(err);
+    showToast("読み込みに失敗しました。もう一度お試しください。");
+    setButtonsDisabled(false);
+  }
+}
+
+function openUsernameModal() {
+  setButtonsDisabled(false);
+  $("username-modal").style.display = "flex";
+  $("username-input").focus();
+}
+
+$("btn-google").addEventListener("click", async () => {
+  setButtonsDisabled(true);
+  try {
+    const provider = new firebase.auth.GoogleAuthProvider();
+    const cred = await auth.signInWithPopup(provider);
+    await afterSignIn(cred.user);
+  } catch (err) {
+    console.error(err);
+    if (err.code !== "auth/popup-closed-by-user") showToast("Googleログインに失敗しました。");
+    setButtonsDisabled(false);
+  }
+});
+
+$("btn-apple").addEventListener("click", async () => {
+  setButtonsDisabled(true);
+  try {
+    const provider = new firebase.auth.OAuthProvider("apple.com");
+    const cred = await auth.signInWithPopup(provider);
+    await afterSignIn(cred.user);
+  } catch (err) {
+    console.error(err);
+    if (err.code !== "auth/popup-closed-by-user") showToast("Appleログインに失敗しました。");
+    setButtonsDisabled(false);
+  }
+});
+
+$("btn-guest").addEventListener("click", async () => {
+  setButtonsDisabled(true);
+  try {
+    const cred = await auth.signInAnonymously();
+    await afterSignIn(cred.user);
+  } catch (err) {
+    console.error(err);
+    showToast("ゲストログインに失敗しました。");
+    setButtonsDisabled(false);
+  }
+});
+
+// --- ユーザー名の重複チェック(入力のたび軽くバリデーションのみ、確定はトランザクションで判定) ---
+$("username-input").addEventListener("input", () => {
+  const name = $("username-input").value.trim();
+  const hint = $("username-hint");
+  const btn = $("btn-confirm-username");
+  if (!name) {
+    hint.textContent = "2〜12文字（他の人と重複できません）";
+    hint.className = "field-hint";
+    btn.disabled = true;
+    return;
+  }
+  if (!isValidUsername(name)) {
+    hint.textContent = "使えない文字が含まれています(2〜12文字)";
+    hint.className = "field-hint error";
+    btn.disabled = true;
+    return;
+  }
+  hint.textContent = "この名前で登録できます";
+  hint.className = "field-hint ok";
+  btn.disabled = false;
+});
+
+$("btn-confirm-username").addEventListener("click", async () => {
+  const name = $("username-input").value.trim();
+  if (!isValidUsername(name) || !pendingUser) return;
+
+  const btn = $("btn-confirm-username");
+  btn.disabled = true;
+  btn.textContent = "登録中...";
+
+  const usernameRef = db.collection("usernames").doc(name);
+  const userRef = db.collection("users").doc(pendingUser.uid);
+
+  try {
+    await db.runTransaction(async (tx) => {
+      const nameDoc = await tx.get(usernameRef);
+      if (nameDoc.exists) {
+        throw new Error("USERNAME_TAKEN");
+      }
+      tx.set(usernameRef, { uid: pendingUser.uid });
+      tx.set(userRef, {
+        username: name,
+        provider: pendingUser.providerData[0]?.providerId || "anonymous",
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        level: 1,
+        totalFinds: 0,
+        totalCollected: 0
+      });
+    });
+    location.replace("home.html");
+  } catch (err) {
+    console.error(err);
+    const hint = $("username-hint");
+    if (err.message === "USERNAME_TAKEN") {
+      hint.textContent = "その名前は既に使われています。別の名前をお試しください。";
+    } else {
+      hint.textContent = "登録に失敗しました。もう一度お試しください。";
+    }
+    hint.className = "field-hint error";
+    btn.disabled = false;
+    btn.textContent = "この名前で始める";
+  }
+});
+
+// 既にログイン済みならログイン画面を飛ばす
+auth.onAuthStateChanged((user) => {
+  if (user && !pendingUser) {
+    db.collection("users").doc(user.uid).get().then((doc) => {
+      if (doc.exists) location.replace("home.html");
+    });
+  }
+});
+</script>
+</body>
+</html>
