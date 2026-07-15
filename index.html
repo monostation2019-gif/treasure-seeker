@@ -1,187 +1,35 @@
-/* ============================================================
-   Treasure Seeker - 発見機能
-   カメラのシャッターボタン（中央CTA）が押された瞬間に動的importされます。
-   ============================================================ */
-import { db } from './firebase.js';
-import {
-  collection, doc, setDoc, deleteDoc, GeoPoint, serverTimestamp
-} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { WASTE_TYPES } from './config.js';
-import { ANON_ID, showToast, toGridId, compressImageToDataUrl, getRank, getWasteType, loadScriptOnce } from './utils.js';
-import { getCurrentLocationFast, loadNearbyDiscoveries } from './map.js';
-import { getLocalStampCount, incrementLocalStampCount, decrementLocalStampCount } from './stamp.js';
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>トレジャーシーカー伊勢</title>
+<link rel="manifest" href="manifest.webmanifest" />
+<meta name="theme-color" content="#1E3A5F" />
+<link rel="stylesheet" href="shared/style.css" />
+</head>
+<body>
+<div class="loading-screen">
+  <div class="spinner"></div>
+  <div class="msg">起動中…</div>
+</div>
 
-const flowOverlay = document.getElementById('flow-overlay');
-const steps = ['step-type-select', 'step-complete']
-  .reduce((o, id)=>{ o[id] = document.getElementById(id); return o; }, {});
-
-let flowState = {
-  photoPromise:null, posPromise:null, savePromise:null,
-  wasteType:null, collected:false, lastDiscoveryId:null
-};
-let typeGridBuilt = false;
-
-function showStep(id){
-  Object.values(steps).forEach(el => el.classList.add('hidden'));
-  steps[id].classList.remove('hidden');
-}
-
-function resetFlowState(){
-  flowState = { photoPromise:null, posPromise:null, savePromise:null, wasteType:null, collected:false, lastDiscoveryId:null };
-  document.getElementById('collected-check').checked = false;
-  document.getElementById('btn-submit-discovery').disabled = true;
-  document.querySelectorAll('.type-chip.selected').forEach(el => el.classList.remove('selected'));
-}
-
-export function closeDiscoverFlow(){
-  flowOverlay.classList.add('hidden');
-  resetFlowState();
-  document.getElementById('nav-map-btn').classList.add('active');
-  document.getElementById('discover-cta').classList.remove('active');
-}
-
-function buildTypeGridOnce(){
-  if(typeGridBuilt) return;
-  typeGridBuilt = true;
-  const typeGrid = document.getElementById('type-grid');
-  WASTE_TYPES.forEach(t=>{
-    const chip = document.createElement('button');
-    chip.type = 'button';
-    chip.className = 'type-chip';
-    chip.innerHTML = `<span class="emoji">${t.emoji}</span><span>${t.label}</span>`;
-    chip.addEventListener('click', ()=>{
-      document.querySelectorAll('.type-chip.selected').forEach(el => el.classList.remove('selected'));
-      chip.classList.add('selected');
-      flowState.wasteType = t.id;
-      document.getElementById('btn-submit-discovery').disabled = false;
-    });
-    typeGrid.appendChild(chip);
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="shared/firebase-config.js"></script>
+<script>
+  // index.html はエントリーポイント専用。ログイン状態に応じて振り分けるだけにして、
+  // 重いUIコードを持たせないことでSafariでの初期クラッシュを防ぐ。
+  auth.onAuthStateChanged((user) => {
+    window.location.replace(user ? "home.html" : "login.html");
   });
-
-  document.getElementById('collected-check').addEventListener('change', (e)=>{
-    flowState.collected = e.target.checked;
-  });
-  document.getElementById('flow-close').addEventListener('click', closeDiscoverFlow);
-  document.getElementById('btn-back-to-map').addEventListener('click', closeDiscoverFlow);
-  document.getElementById('btn-submit-discovery').addEventListener('click', submitDiscovery);
-  document.getElementById('btn-undo-discovery').addEventListener('click', undoDiscovery);
-  document.getElementById('btn-open-share').addEventListener('click', openShare);
-}
-
-// カメラで撮った写真を受け取り、発見フローを開始する
-export function startDiscoverFlow(file){
-  buildTypeGridOnce();
-  flowOverlay.classList.remove('hidden');
-
-  // ★ 体感速度対策：写真の圧縮と現在地の取得はバックグラウンドで並行して進め、
-  //   ユーザーには待たせずすぐに種別選択画面を表示します。
-  flowState.photoPromise = compressImageToDataUrl(file, 1000, 0.68);
-  flowState.posPromise = getCurrentLocationFast();
-  showStep('step-type-select');
-}
-
-function submitDiscovery(){
-  if(!flowState.wasteType || !flowState.photoPromise || !flowState.posPromise) return;
-
-  const countBefore = getLocalStampCount();
-  const countAfter = countBefore + 1;
-  const prevRank = getRank(countBefore);
-  const newRank = getRank(countAfter);
-  const rankedUp = newRank.name !== prevRank.name;
-
-  incrementLocalStampCount();
-  document.getElementById('complete-stamp-count').textContent = countAfter;
-
-  const banner = document.getElementById('rankup-banner');
-  if(rankedUp){
-    banner.classList.remove('hidden');
-    document.getElementById('rankup-name').textContent = `${newRank.icon} ${newRank.name}`;
-    loadScriptOnce('https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js')
-      .then(()=>{ if(window.confetti) window.confetti({ particleCount:120, spread:90, origin:{ y:0.6 } }); })
-      .catch(()=>{ /* 演出が出なくても発見報告自体には影響させない */ });
-  }else{
-    banner.classList.add('hidden');
-  }
-
-  const statusLine = document.getElementById('save-status-line');
-  statusLine.textContent = 'クラウドに保存しています…';
-  statusLine.classList.remove('is-error');
-
-  showStep('step-complete');
-
-  flowState.savePromise = saveDiscoveryInBackground(
-    flowState.photoPromise, flowState.posPromise, flowState.wasteType, flowState.collected, statusLine
-  );
-}
-
-async function saveDiscoveryInBackground(photoPromise, posPromise, wasteType, collected, statusLine){
-  try{
-    const [photoDataUrl, pos] = await Promise.all([photoPromise, posPromise]);
-    const gridId = toGridId(pos.lat, pos.lng);
-    const discoveryRef = doc(collection(db, 'discoveries'));
-
-    // discoveries（軽量な情報）とdiscoveryPhotos（Base64画像）を分けて保存し、
-    // 地図のピン一覧取得のたびに画像まで読み込んでしまうのを防ぎます。
-    await Promise.all([
-      setDoc(discoveryRef, {
-        anonId: ANON_ID,
-        location: new GeoPoint(pos.lat, pos.lng),
-        gridId,
-        wasteType,
-        hasImage: true,
-        collected: !!collected,
-        createdAt: serverTimestamp()
-      }),
-      setDoc(doc(db, 'discoveryPhotos', discoveryRef.id), { imageDataUrl: photoDataUrl })
-    ]);
-
-    flowState.lastDiscoveryId = discoveryRef.id;
-    if(statusLine) statusLine.textContent = '保存が完了しました';
-    loadNearbyDiscoveries(true);
-    return discoveryRef.id;
-  }catch(err){
-    console.error('background save failed', err);
-    decrementLocalStampCount();
-    if(statusLine){
-      statusLine.textContent = '保存に失敗しました。電波の良い場所でもう一度お試しください';
-      statusLine.classList.add('is-error');
+  // 万一onAuthStateChangedが応答しない場合のフォールバック
+  setTimeout(() => {
+    if (document.querySelector(".loading-screen")) {
+      window.location.replace("login.html");
     }
-    showToast('保存に失敗しました。通信環境を確認してもう一度お試しください。');
-    throw err;
-  }
-}
-
-async function undoDiscovery(){
-  const ok = confirm('この発見記録を取り消します。よろしいですか？');
-  if(!ok) return;
-
-  const btn = document.getElementById('btn-undo-discovery');
-  btn.textContent = '取り消しています…';
-
-  try{
-    if(flowState.savePromise) await flowState.savePromise;
-    const targetId = flowState.lastDiscoveryId;
-    if(!targetId) throw new Error('discoveryId not ready');
-
-    await Promise.all([
-      deleteDoc(doc(db, 'discoveries', targetId)),
-      deleteDoc(doc(db, 'discoveryPhotos', targetId))
-    ]);
-    decrementLocalStampCount();
-    showToast('取り消しました');
-    loadNearbyDiscoveries(true);
-    closeDiscoverFlow();
-  }catch(err){
-    console.error('undo failed', err);
-    showToast('取り消しに失敗しました。通信環境を確認してもう一度お試しください。');
-    btn.textContent = '間違えた場合はここから取り消す';
-  }
-}
-
-async function openShare(){
-  const { openShareModal } = await import('./share.js');
-  const type = getWasteType(flowState.wasteType);
-  const count = document.getElementById('complete-stamp-count').textContent;
-  const photoDataUrl = await flowState.photoPromise;
-  openShareModal({ photoDataUrl, stampCount: count, wasteLabel: type.label });
-}
+  }, 4000);
+</script>
+</body>
+</html>

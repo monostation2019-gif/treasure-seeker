@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>さんぽ＆クリーンマップ - トレジャーシーカー伊勢</title>
+<link rel="manifest" href="manifest.webmanifest" />
+<meta name="theme-color" content="#1E3A5F" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="shared/style.css" />
+</head>
+<body class="map-page">
+<div class="app-shell">
+
+  <header class="app-header">
+    <a href="home.html" class="back-btn">←</a>
+    <h1>🗺️ さんぽ＆クリーンマップ</h1>
+  </header>
+
+  <main class="app-main">
+    <div id="map"></div>
+
+    <div class="category-bar" id="category-bar"></div>
+
+    <div class="hotspot-badge">
+      <div class="n" id="hotspot-count">0</div>
+      <div class="l">ホットスポット</div>
+    </div>
+
+    <button class="map-floating-btn locate" id="btn-locate">📍</button>
+    <button class="map-floating-btn add" id="btn-add">＋</button>
+
+    <div class="map-legend">
+      <div class="legend-row"><span class="dot" style="background:#6FA8C7"></span>ゴミ拾い</div>
+      <div class="legend-row"><span class="dot" style="background:#4C7A5B"></span>プラスチック</div>
+      <div class="legend-row"><span class="dot" style="background:#C0392B"></span>危険物</div>
+      <div class="legend-scale"></div>
+      <div class="legend-scale-labels"><span>少</span><span>多</span></div>
+    </div>
+
+    <div class="count-strip">
+      <div class="item"><div class="label">ペットボトル</div><div class="value" id="count-pet_bottle">0本</div></div>
+      <div class="item"><div class="label">たばこ吸い殻</div><div class="value" id="count-cigarette">0本</div></div>
+      <div class="item"><div class="label">空き缶</div><div class="value" id="count-can">0本</div></div>
+    </div>
+  </main>
+</div>
+
+<!-- 発見登録シート -->
+<div class="sheet-backdrop" id="sheet-backdrop"></div>
+<div class="sheet" id="add-sheet">
+  <div class="sheet-handle"></div>
+  <h3>発見を記録する</h3>
+
+  <div class="category-picker" id="category-picker"></div>
+
+  <div class="size-toggle" id="size-toggle">
+    <div class="opt selected" data-size="normal">通常サイズ</div>
+    <div class="opt" data-size="large">大型ゴミ</div>
+  </div>
+
+  <label class="photo-picker" id="photo-picker-label">
+    📷 タップして写真を追加（任意）
+    <input type="file" id="photo-input" accept="image/*" capture="environment" />
+  </label>
+  <img id="photo-preview" class="photo-preview" style="display:none;" />
+
+  <p class="small-note" id="location-note" style="margin: 0 0 12px;">位置情報を取得中…</p>
+
+  <button class="btn btn-primary" id="btn-submit-find">この場所に記録する</button>
+  <div style="height:8px;"></div>
+  <button class="btn btn-outline" id="btn-cancel-find">キャンセル</button>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="shared/firebase-config.js"></script>
+<script src="shared/app-common.js"></script>
+<script>
+  renderBottomNav("map");
+
+  const ISE_CENTER = [34.4864, 136.7096]; // 伊勢神宮 内宮付近
+  let map, markersLayer, currentUser;
+  let activeCategory = null; // null = すべて表示
+  let allFinds = [];
+  let pendingLatLng = null;
+  let selectedCategory = CATEGORIES[0].id;
+  let selectedSize = "normal";
+  let selectedPhotoBase64 = null;
+
+  requireAuth((user) => {
+    currentUser = user;
+    initMap();
+    buildCategoryBar();
+    buildCategoryPicker();
+    listenFinds();
+    bindUI();
+  });
+
+  function initMap() {
+    map = L.map("map", { zoomControl: false, attributionControl: false }).setView(ISE_CENTER, 15);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+    }).addTo(map);
+    markersLayer = L.layerGroup().addTo(map);
+  }
+
+  function buildCategoryBar() {
+    const bar = document.getElementById("category-bar");
+    const allChip = document.createElement("div");
+    allChip.className = "category-chip active";
+    allChip.dataset.cat = "";
+    allChip.innerHTML = `すべて`;
+    bar.appendChild(allChip);
+
+    CATEGORIES.forEach((c) => {
+      const chip = document.createElement("div");
+      chip.className = "category-chip";
+      chip.dataset.cat = c.id;
+      chip.innerHTML = `${c.icon} ${c.label} <span class="n" data-count-chip="${c.id}">0</span>`;
+      bar.appendChild(chip);
+    });
+
+    bar.addEventListener("click", (e) => {
+      const chip = e.target.closest(".category-chip");
+      if (!chip) return;
+      activeCategory = chip.dataset.cat || null;
+      [...bar.children].forEach((c) => c.classList.toggle("active", c === chip));
+      renderMarkers();
+    });
+  }
+
+  function buildCategoryPicker() {
+    const picker = document.getElementById("category-picker");
+    picker.innerHTML = CATEGORIES.map(
+      (c) => `<div class="opt ${c.id === selectedCategory ? "selected" : ""}" data-cat="${c.id}">
+        <span class="icon">${c.icon}</span>${c.label}
+      </div>`
+    ).join("");
+    picker.addEventListener("click", (e) => {
+      const opt = e.target.closest(".opt");
+      if (!opt) return;
+      selectedCategory = opt.dataset.cat;
+      [...picker.children].forEach((c) => c.classList.toggle("selected", c === opt));
+    });
+  }
+
+  function listenFinds() {
+    // 直近30日分のみ監視（軽量化のため全件監視は避ける）
+    const since = firebase.firestore.Timestamp.fromDate(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000));
+    db.collection("finds")
+      .where("createdAt", ">=", since)
+      .onSnapshot(
+        (snap) => {
+          allFinds = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+          renderMarkers();
+          renderCounts();
+        },
+        (err) => {
+          console.error(err);
+          showToast("マップデータの取得に失敗しました");
+        }
+      );
+  }
+
+  function renderMarkers() {
+    markersLayer.clearLayers();
+    const filtered = activeCategory ? allFinds.filter((f) => f.category === activeCategory) : allFinds;
+
+    filtered.forEach((f) => {
+      if (typeof f.lat !== "number" || typeof f.lng !== "number") return;
+      const cat = getCategory(f.category);
+      const marker = L.circleMarker([f.lat, f.lng], {
+        radius: f.size === "large" ? 10 : 7,
+        color: "#fff",
+        weight: 1.5,
+        fillColor: cat.color,
+        fillOpacity: 0.9,
+      });
+      marker.bindPopup(
+        `<b>${cat.icon} ${cat.label}</b>${f.size === "large" ? "（大型）" : ""}<br/>
+         ${f.town ? f.town : ""}<br/>
+         <a href="https://www.google.com/maps/dir/?api=1&destination=${f.lat},${f.lng}" target="_blank">📍 ここへ移動</a>`
+      );
+      marker.addTo(markersLayer);
+    });
+
+    document.getElementById("hotspot-count").textContent = filtered.length;
+
+    CATEGORIES.forEach((c) => {
+      const n = allFinds.filter((f) => f.category === c.id).length;
+      const el = document.querySelector(`[data-count-chip="${c.id}"]`);
+      if (el) el.textContent = n;
+    });
+  }
+
+  function renderCounts() {
+    const today = allFinds.filter((f) => {
+      if (!f.createdAt?.toDate) return false;
+      const d = f.createdAt.toDate();
+      const now = new Date();
+      return d.toDateString() === now.toDateString();
+    });
+    ["pet_bottle", "cigarette", "can"].forEach((catId) => {
+      const n = today.filter((f) => f.category === catId).length;
+      const label = catId === "cigarette" ? `${n}本` : catId === "can" ? `${n}本` : `${n}本`;
+      document.getElementById(`count-${catId}`).textContent = label;
+    });
+  }
+
+  function bindUI() {
+    document.getElementById("btn-locate").addEventListener("click", () => {
+      if (!navigator.geolocation) {
+        showToast("位置情報が利用できません");
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          map.setView([pos.coords.latitude, pos.coords.longitude], 17);
+        },
+        () => showToast("現在地を取得できませんでした"),
+        { enableHighAccuracy: true, timeout: 6000 }
+      );
+    });
+
+    document.getElementById("btn-add").addEventListener("click", openAddSheet);
+    document.getElementById("btn-cancel-find").addEventListener("click", closeAddSheet);
+    document.getElementById("sheet-backdrop").addEventListener("click", closeAddSheet);
+
+    document.getElementById("size-toggle").addEventListener("click", (e) => {
+      const opt = e.target.closest(".opt");
+      if (!opt) return;
+      selectedSize = opt.dataset.size;
+      [...e.currentTarget.children].forEach((c) => c.classList.toggle("selected", c === opt));
+    });
+
+    document.getElementById("photo-input").addEventListener("change", async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      selectedPhotoBase64 = await compressImageToBase64(file);
+      const preview = document.getElementById("photo-preview");
+      preview.src = selectedPhotoBase64;
+      preview.style.display = "block";
+      document.getElementById("photo-picker-label").textContent = "📷 写真を変更する";
+    });
+
+    document.getElementById("btn-submit-find").addEventListener("click", submitFind);
+
+    // URLに #add が付いていたら自動でシートを開く（ホーム画面の「AIかんたんゴミ分別」導線用）
+    if (location.hash === "#add") openAddSheet();
+  }
+
+  function openAddSheet() {
+    document.getElementById("sheet-backdrop").classList.add("show");
+    document.getElementById("add-sheet").classList.add("show");
+
+    const center = map.getCenter();
+    pendingLatLng = { lat: center.lat, lng: center.lng };
+    document.getElementById("location-note").textContent = "現在の地図の中心地点に記録します";
+
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          pendingLatLng = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+          document.getElementById("location-note").textContent = "現在地を取得しました";
+        },
+        () => {
+          document.getElementById("location-note").textContent = "現在の地図の中心地点に記録します";
+        },
+        { enableHighAccuracy: true, timeout: 5000 }
+      );
+    }
+  }
+
+  function closeAddSheet() {
+    document.getElementById("sheet-backdrop").classList.remove("show");
+    document.getElementById("add-sheet").classList.remove("show");
+    selectedPhotoBase64 = null;
+    document.getElementById("photo-preview").style.display = "none";
+    document.getElementById("photo-input").value = "";
+    document.getElementById("photo-picker-label").textContent = "📷 タップして写真を追加（任意）";
+  }
+
+  async function submitFind() {
+    if (!pendingLatLng) {
+      showToast("位置情報を取得できていません");
+      return;
+    }
+    const btn = document.getElementById("btn-submit-find");
+    btn.classList.add("loading");
+    try {
+      const town = (await reverseGeocodeTown(pendingLatLng.lat, pendingLatLng.lng)) || "";
+
+      const findRef = await db.collection("finds").add({
+        uid: currentUser.uid,
+        nickname: currentUser.displayName || "ゲスト冒険者",
+        category: selectedCategory,
+        size: selectedSize,
+        lat: pendingLatLng.lat,
+        lng: pendingLatLng.lng,
+        town,
+        hasPhoto: !!selectedPhotoBase64,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      });
+
+      // 写真は別コレクションへ（軽量化・遅延読み込みのため）
+      if (selectedPhotoBase64) {
+        await db.collection("findPhotos").doc(findRef.id).set({
+          photoBase64: selectedPhotoBase64,
+        });
+      }
+
+      // ユーザーの累計を更新
+      await db
+        .collection("users")
+        .doc(currentUser.uid)
+        .set(
+          {
+            totalFinds: firebase.firestore.FieldValue.increment(1),
+            totalLargeItems: firebase.firestore.FieldValue.increment(selectedSize === "large" ? 1 : 0),
+            contributionScore: firebase.firestore.FieldValue.increment(selectedSize === "large" ? 5 : 1),
+          },
+          { merge: true }
+        );
+
+      showToast("発見を記録しました！");
+      closeAddSheet();
+    } catch (e) {
+      console.error(e);
+      showToast("記録に失敗しました。もう一度お試しください");
+    } finally {
+      btn.classList.remove("loading");
+    }
+  }
+</script>
+</body>
+</html>
