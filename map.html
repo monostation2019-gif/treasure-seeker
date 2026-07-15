@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>トレジャーシーカー伊勢 | クリーンマップ</title>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Kiwi+Maru:wght@400;500&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+
+<style>
+  :root{
+    --forest:#3E6B4F; --forest-deep:#2C4E3A; --forest-soft:#EAF3EC;
+    --cream:#FBF8F0; --card:#FFFFFF; --torii:#B5502F; --gold:#E3A73B;
+    --ink:#233127; --ink-soft:#7A8A7D; --line:#E7E2D4;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{height:100%; margin:0;}
+  body{font-family:"Noto Sans JP", sans-serif; color:var(--ink); background:var(--forest-soft); display:flex; justify-content:center;}
+
+  .stage{width:100%; max-width:480px; min-height:100vh; min-height:100dvh; background:var(--cream); display:flex; flex-direction:column; position:relative;}
+
+  header{
+    background:linear-gradient(155deg, var(--forest) 0%, var(--forest-deep) 100%);
+    padding:calc(env(safe-area-inset-top,0px) + 16px) 18px 14px;
+    color:#fff; position:relative; z-index:5;
+  }
+  header h1{font-family:"Kiwi Maru", serif; font-weight:500; font-size:18px; margin:0 0 10px;}
+
+  .chips{display:flex; gap:8px; overflow-x:auto; padding-bottom:2px; scrollbar-width:none;}
+  .chips::-webkit-scrollbar{display:none;}
+  .chip{
+    flex-shrink:0; display:flex; align-items:center; gap:5px;
+    background:rgba(255,255,255,0.14); border:1px solid rgba(255,255,255,0.32);
+    color:#fff; font-size:12px; font-weight:700;
+    padding:7px 12px; border-radius:999px; cursor:pointer;
+    transition:background .15s ease;
+  }
+  .chip svg{width:13px; height:13px;}
+  .chip.active{background:#fff; color:var(--forest-deep); border-color:#fff;}
+
+  .map-wrap{flex:1; position:relative;}
+  #map{position:absolute; inset:0;}
+
+  .legend{
+    position:absolute; left:12px; bottom:96px; z-index:4;
+    background:rgba(255,255,255,0.95); border-radius:14px;
+    padding:10px 12px; box-shadow:0 8px 20px rgba(44,78,58,0.18);
+    font-size:11px; color:var(--ink-soft); max-width:150px;
+  }
+  .legend .title{font-weight:700; color:var(--ink); margin-bottom:6px; font-size:11.5px;}
+  .legend .bar{height:8px; border-radius:5px; background:linear-gradient(90deg,#8FCB9B,#F4D35E,#D9603B); margin-bottom:4px;}
+  .legend .row{display:flex; justify-content:space-between;}
+
+  .fab-col{
+    position:absolute; right:12px; bottom:96px; z-index:4;
+    display:flex; flex-direction:column; gap:10px;
+  }
+  .fab{
+    width:44px; height:44px; border-radius:50%;
+    background:#fff; box-shadow:0 8px 18px rgba(44,78,58,0.22);
+    display:flex; align-items:center; justify-content:center;
+    border:none; cursor:pointer; color:var(--forest-deep);
+  }
+  .fab.on{background:var(--forest); color:#fff;}
+  .fab svg{width:19px; height:19px;}
+
+  .popup-card{font-family:"Noto Sans JP", sans-serif; min-width:160px;}
+  .popup-card .cat{display:inline-block; font-size:11px; font-weight:700; color:var(--forest-deep); background:var(--forest-soft); padding:2px 8px; border-radius:999px; margin-bottom:6px;}
+  .popup-card .photo{width:100%; height:100px; object-fit:cover; border-radius:10px; margin-bottom:6px; background:#EFEBDF;}
+  .popup-card .photo.skeleton{background:linear-gradient(90deg,#EFEBDF 25%,#F6F3E9 37%,#EFEBDF 63%); background-size:400% 100%; animation:sk 1.4s ease infinite;}
+  @keyframes sk{0%{background-position:100% 50%;}100%{background-position:0 50%;}}
+  .popup-card .nav-link{display:inline-flex; align-items:center; gap:5px; font-size:12px; font-weight:700; color:var(--torii); text-decoration:none; margin-top:4px;}
+  .popup-card .nav-link svg{width:13px; height:13px;}
+
+  nav.bottom{
+    position:fixed; left:50%; transform:translateX(-50%); bottom:0;
+    width:100%; max-width:480px; background:var(--card);
+    border-top:1px solid var(--line); display:flex;
+    padding:8px 6px calc(env(safe-area-inset-bottom,0px) + 8px); z-index:10;
+  }
+  nav.bottom a{flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; text-decoration:none; color:var(--ink-soft); font-size:10.5px; padding:4px 0;}
+  nav.bottom a svg{width:20px; height:20px;}
+  nav.bottom a.active{color:var(--forest-deep); font-weight:700;}
+  nav.bottom a.active svg{color:var(--forest);}
+
+  .loading-overlay{position:fixed; inset:0; z-index:99; background:var(--cream); display:flex; align-items:center; justify-content:center; flex-direction:column; gap:10px; transition:opacity .35s ease;}
+  .loading-overlay .leaf{width:30px; height:30px; border:3px solid #DDE7DD; border-top-color:var(--forest); border-radius:50%; animation:spin .8s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .loading-overlay p{color:var(--ink-soft); font-size:13px; margin:0;}
+
+  .toast{
+    position:absolute; top:14px; left:50%; transform:translateX(-50%);
+    background:rgba(35,49,39,0.92); color:#fff; font-size:12.5px;
+    padding:8px 16px; border-radius:999px; z-index:6;
+    opacity:0; pointer-events:none; transition:opacity .25s ease;
+  }
+  .toast.show{opacity:1;}
+</style>
+</head>
+<body>
+
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="leaf"></div>
+  <p>読み込み中…</p>
+</div>
+
+<div class="stage">
+  <header>
+    <h1>クリーンマップ</h1>
+    <div class="chips" id="categoryChips">
+      <div class="chip active" data-cat="all">すべて</div>
+      <div class="chip" data-cat="ペットボトル">💧 ペットボトル</div>
+      <div class="chip" data-cat="たばこ吸い殻">🚬 たばこ吸い殻</div>
+      <div class="chip" data-cat="空き缶">🥫 空き缶</div>
+      <div class="chip" data-cat="プラスチック">♻️ プラスチック</div>
+      <div class="chip" data-cat="危険物">⚠️ 危険物</div>
+      <div class="chip" data-cat="ビン">🍾 ビン</div>
+      <div class="chip" data-cat="紙類">📄 紙類</div>
+      <div class="chip" data-cat="大型ゴミ">🛋️ 大型ゴミ</div>
+    </div>
+  </header>
+
+  <div class="map-wrap">
+    <div id="map"></div>
+
+    <div class="legend" id="heatLegend" style="display:none;">
+      <div class="title">ゴミの多さ（ヒートマップ）</div>
+      <div class="bar"></div>
+      <div class="row"><span>少ない</span><span>多い</span></div>
+    </div>
+
+    <div class="fab-col">
+      <button class="fab" id="heatToggle" title="ヒートマップ切替">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/></svg>
+      </button>
+      <button class="fab" id="locateBtn" title="現在地へ移動">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
+      </button>
+    </div>
+
+    <div class="toast" id="toast"></div>
+  </div>
+
+  <nav class="bottom">
+    <a href="home.html">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>
+      ホーム
+    </a>
+    <a class="active" href="map.html">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 20l-6-3V4l6 3 6-3 6 3v13l-6-3-6 3z"/><path d="M9 7v13M15 4v13"/></svg>
+      マップ
+    </a>
+    <a href="discover.html">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+      発見
+    </a>
+    <a href="mypage.html">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>
+      マイページ
+    </a>
+  </nav>
+</div>
+
+<script>
+/* =====================================================================
+   Firebase 初期化（他ページと同じ設定にしてください）
+   ===================================================================== */
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT.firebaseapp.com",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_PROJECT.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+const LOGIN_PAGE = "login.html";
+const ISE_CENTER = [34.4859, 136.7096]; // 伊勢神宮 内宮付近を初期中心に設定
+
+const overlay   = document.getElementById('loadingOverlay');
+const toastEl   = document.getElementById('toast');
+const heatToggle= document.getElementById('heatToggle');
+const locateBtn = document.getElementById('locateBtn');
+const legendEl  = document.getElementById('heatLegend');
+
+function showToast(msg){
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  setTimeout(() => toastEl.classList.remove('show'), 2200);
+}
+
+/* ---------------------------------------------------------------------
+   カテゴリごとのアイコン（Leaflet divIcon、絵文字で軽量に表現）
+   --------------------------------------------------------------------- */
+const CATEGORY_EMOJI = {
+  'ペットボトル':'💧', 'たばこ吸い殻':'🚬', '空き缶':'🥫', 'プラスチック':'♻️',
+  '危険物':'⚠️', 'ビン':'🍾', '紙類':'📄', '大型ゴミ':'🛋️'
+};
+function makeIcon(category){
+  const emoji = CATEGORY_EMOJI[category] || '📍';
+  return L.divIcon({
+    className: 'gomi-marker',
+    html: `<div style="width:32px;height:32px;border-radius:50% 50% 50% 0;transform:rotate(45deg);background:#fff;box-shadow:0 3px 8px rgba(44,78,58,0.3);display:flex;align-items:center;justify-content:center;border:2px solid #3E6B4F;">
+             <span style="transform:rotate(-45deg);font-size:15px;">${emoji}</span>
+           </div>`,
+    iconSize:[32,32], iconAnchor:[16,32], popupAnchor:[0,-30]
+  });
+}
+
+const map = L.map('map', { zoomControl:false }).setView(ISE_CENTER, 14);
+L.control.zoom({ position:'bottomright' }).addTo(map);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 19,
+  attribution: '&copy; OpenStreetMap contributors'
+}).addTo(map);
+
+const markerLayer = L.layerGroup().addTo(map);
+let allReports = []; // { id, lat, lng, category, marker }
+let activeCategory = 'all';
+let heatOn = false;
+let heatLayerGroup = null;
+
+/* ---------------------------------------------------------------------
+   写真の遅延読み込み（reportPhotos コレクションを別管理）
+   マーカーをクリックした時だけ該当写真を取得する。
+   --------------------------------------------------------------------- */
+async function loadPhotoLazily(reportId, imgEl){
+  try{
+    const doc = await db.collection('reportPhotos').doc(reportId).get();
+    if(doc.exists && doc.data().imageBase64){
+      imgEl.src = doc.data().imageBase64;
+      imgEl.classList.remove('skeleton');
+    } else {
+      imgEl.remove();
+    }
+  }catch(e){
+    console.warn('写真の取得に失敗しました', e);
+    imgEl.remove();
+  }
+}
+
+function buildPopupHtml(report){
+  const gid = 'photo-' + report.id;
+  return `
+    <div class="popup-card">
+      <span class="cat">${escapeHtml(report.category || 'その他')}</span>
+      <img class="photo skeleton" id="${gid}" alt="">
+      <div>${escapeHtml(report.memo || '')}</div>
+      <a class="nav-link" target="_blank" rel="noopener"
+         href="https://www.google.com/maps/dir/?api=1&destination=${report.lat},${report.lng}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l19-9-9 19-2-8-8-2z"/></svg>
+        ここへ行く
+      </a>
+    </div>`;
+}
+
+function escapeHtml(str){
+  return String(str).replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
+}
+
+function renderMarkers(){
+  markerLayer.clearLayers();
+  allReports.forEach(r => {
+    if(activeCategory !== 'all' && r.category !== activeCategory) return;
+    if(typeof r.lat !== 'number' || typeof r.lng !== 'number') return;
+
+    const marker = L.marker([r.lat, r.lng], { icon: makeIcon(r.category) });
+    marker.bindPopup(buildPopupHtml(r));
+    marker.on('popupopen', () => {
+      const img = document.getElementById('photo-' + r.id);
+      if(img) loadPhotoLazily(r.id, img);
+    });
+    marker.addTo(markerLayer);
+  });
+}
+
+/* ---------------------------------------------------------------------
+   グリッドベースの簡易ヒートマップ（外部プラグイン不使用）
+   地図表示範囲を格子状に区切り、各セルの発見件数から色の濃さを決める。
+   --------------------------------------------------------------------- */
+function renderHeatGrid(){
+  if(heatLayerGroup){ map.removeLayer(heatLayerGroup); }
+  heatLayerGroup = L.layerGroup();
+
+  const cellSize = 0.004; // 約400m四方のセル
+  const counts = {};
+  let maxCount = 0;
+
+  allReports.forEach(r => {
+    if(typeof r.lat !== 'number' || typeof r.lng !== 'number') return;
+    const gx = Math.floor(r.lat / cellSize);
+    const gy = Math.floor(r.lng / cellSize);
+    const key = gx + '_' + gy;
+    counts[key] = (counts[key] || 0) + 1;
+    if(counts[key] > maxCount) maxCount = counts[key];
+  });
+
+  Object.entries(counts).forEach(([key, count]) => {
+    const [gx, gy] = key.split('_').map(Number);
+    const lat0 = gx * cellSize, lng0 = gy * cellSize;
+    const bounds = [[lat0, lng0], [lat0 + cellSize, lng0 + cellSize]];
+    const ratio = maxCount ? count / maxCount : 0;
+    const color = ratio < 0.5
+      ? lerpColor('#8FCB9B', '#F4D35E', ratio / 0.5)
+      : lerpColor('#F4D35E', '#D9603B', (ratio - 0.5) / 0.5);
+    L.rectangle(bounds, { color, weight:0, fillOpacity:0.45 }).addTo(heatLayerGroup);
+  });
+
+  if(heatOn) heatLayerGroup.addTo(map);
+}
+function lerpColor(a, b, t){
+  const ah = parseInt(a.slice(1),16), bh = parseInt(b.slice(1),16);
+  const ar=(ah>>16)&255, ag=(ah>>8)&255, ab=ah&255;
+  const br=(bh>>16)&255, bg=(bh>>8)&255, bb=bh&255;
+  const r=Math.round(ar+(br-ar)*t), g=Math.round(ag+(bg-ag)*t), b2=Math.round(ab+(bb-ab)*t);
+  return `rgb(${r},${g},${b2})`;
+}
+
+/* ---------------------------------------------------------------------
+   Firestore の reports をリアルタイム購読
+   想定フィールド: lat, lng, category, memo, createdAt
+   --------------------------------------------------------------------- */
+function subscribeReports(){
+  db.collection('reports').limit(1000).onSnapshot(snap => {
+    allReports = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    renderMarkers();
+    renderHeatGrid();
+  }, err => {
+    console.error('reportsの取得に失敗しました', err);
+    showToast('地図データを取得できませんでした');
+  });
+}
+
+document.getElementById('categoryChips').addEventListener('click', (e) => {
+  const chip = e.target.closest('.chip');
+  if(!chip) return;
+  document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+  chip.classList.add('active');
+  activeCategory = chip.dataset.cat;
+  renderMarkers();
+});
+
+heatToggle.addEventListener('click', () => {
+  heatOn = !heatOn;
+  heatToggle.classList.toggle('on', heatOn);
+  legendEl.style.display = heatOn ? 'block' : 'none';
+  if(heatOn && heatLayerGroup){ heatLayerGroup.addTo(map); }
+  else if(heatLayerGroup){ map.removeLayer(heatLayerGroup); }
+});
+
+/* ---------------------------------------------------------------------
+   現在地取得。連打・古い応答を無視するため token 方式でキャンセルする。
+   --------------------------------------------------------------------- */
+let geoToken = 0;
+locateBtn.addEventListener('click', () => {
+  if(!navigator.geolocation){
+    showToast('この端末は位置情報に対応していません');
+    return;
+  }
+  const myToken = ++geoToken;
+  locateBtn.disabled = true;
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      if(myToken !== geoToken) return; // 古い要求は破棄
+      locateBtn.disabled = false;
+      const { latitude, longitude } = pos.coords;
+      map.setView([latitude, longitude], 16);
+      L.circleMarker([latitude, longitude], {
+        radius:8, color:'#3E6B4F', weight:2, fillColor:'#7FC98C', fillOpacity:0.9
+      }).addTo(map);
+    },
+    (err) => {
+      if(myToken !== geoToken) return;
+      locateBtn.disabled = false;
+      console.error(err);
+      showToast('現在地を取得できませんでした');
+    },
+    { enableHighAccuracy:true, timeout:8000, maximumAge:15000 }
+  );
+});
+
+/* 未ログインなら login.html へ */
+let resolved = false;
+auth.onAuthStateChanged((user) => {
+  if(resolved) return;
+  resolved = true;
+  if(!user){
+    window.location.href = LOGIN_PAGE;
+    return;
+  }
+  overlay.style.opacity = '0';
+  setTimeout(() => overlay.style.display = 'none', 350);
+  subscribeReports();
+});
+</script>
+</body>
+</html>

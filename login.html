@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>トレジャーシーカー伊勢 | ログイン</title>
+
+<!-- Firebase (compat SDK, single-file friendly) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Kiwi+Maru:wght@400;500&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+
+<style>
+  :root{
+    --forest:#3E6B4F;
+    --forest-deep:#2C4E3A;
+    --cream:#FBF8F0;
+    --torii:#B5502F;
+    --gold:#E3A73B;
+    --ink:#233127;
+    --ink-soft:#5B6B5F;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    font-family:"Noto Sans JP", sans-serif;
+    color:var(--ink);
+    background:var(--cream);
+    display:flex;
+    justify-content:center;
+  }
+
+  .stage{
+    position:relative;
+    width:100%;
+    max-width:480px;
+    min-height:100vh;
+    min-height:100dvh;
+    overflow:hidden;
+  }
+
+  .bg{
+    position:absolute; inset:0;
+    background-image:url("./login-bg.png");
+    background-size:cover;
+    background-position:center 30%;
+    filter:saturate(1.05);
+  }
+  .bg::after{
+    content:"";
+    position:absolute; inset:0;
+    background:
+      linear-gradient(to bottom, rgba(20,38,26,0.05) 0%, rgba(20,38,26,0.15) 40%, rgba(18,32,22,0.78) 78%, rgba(15,26,18,0.94) 100%);
+  }
+
+  .content{
+    position:relative;
+    z-index:2;
+    min-height:100vh;
+    min-height:100dvh;
+    display:flex;
+    flex-direction:column;
+    justify-content:flex-end;
+    padding:28px 24px calc(env(safe-area-inset-bottom, 0px) + 32px);
+  }
+
+  .brand{
+    text-align:center;
+    margin-bottom:6px;
+  }
+  .eyebrow{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    color:#EAF3EC;
+    font-size:12.5px;
+    letter-spacing:.08em;
+    background:rgba(255,255,255,0.14);
+    border:1px solid rgba(255,255,255,0.28);
+    padding:5px 14px 5px 10px;
+    border-radius:999px;
+    backdrop-filter:blur(6px);
+    margin-bottom:14px;
+  }
+  .eyebrow svg{width:14px; height:14px; flex-shrink:0;}
+
+  .brand h1{
+    font-family:"Kiwi Maru", serif;
+    font-weight:500;
+    font-size:clamp(30px, 8vw, 40px);
+    line-height:1.25;
+    color:#FFFFFF;
+    margin:0 0 8px;
+    text-shadow:0 2px 18px rgba(0,0,0,0.35);
+  }
+  .brand p{
+    margin:0 0 26px;
+    color:#E7EFE7;
+    font-size:14.5px;
+    line-height:1.7;
+    text-shadow:0 1px 10px rgba(0,0,0,0.4);
+  }
+
+  .torii-rule{
+    display:flex; align-items:center; justify-content:center; gap:10px;
+    margin:0 0 20px;
+    color:rgba(255,255,255,0.55);
+  }
+  .torii-rule span{height:1px; width:44px; background:rgba(255,255,255,0.35);}
+  .torii-rule svg{width:20px; height:20px;}
+
+  .auth-card{
+    background:rgba(251,248,240,0.97);
+    border-radius:22px;
+    padding:22px 20px 18px;
+    box-shadow:0 18px 40px rgba(15,26,18,0.35);
+  }
+  .auth-card h2{
+    font-family:"Kiwi Maru", serif;
+    font-weight:500;
+    font-size:16px;
+    margin:0 0 14px;
+    color:var(--forest-deep);
+    text-align:center;
+  }
+
+  .btn{
+    width:100%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:10px;
+    padding:13px 16px;
+    border-radius:14px;
+    border:1.5px solid transparent;
+    font-family:"Noto Sans JP", sans-serif;
+    font-size:14.5px;
+    font-weight:700;
+    cursor:pointer;
+    margin-bottom:11px;
+    transition:transform .12s ease, box-shadow .12s ease, opacity .12s ease;
+  }
+  .btn:active{transform:scale(0.97);}
+  .btn svg{width:19px; height:19px; flex-shrink:0;}
+  .btn:disabled{opacity:0.55; cursor:not-allowed;}
+
+  .btn-google{
+    background:#FFFFFF;
+    color:#3C4A3F;
+    border-color:#DDE3D9;
+  }
+  .btn-apple{
+    background:#111412;
+    color:#FFFFFF;
+  }
+  .btn-guest{
+    background:transparent;
+    color:var(--forest-deep);
+    border-color:var(--forest-deep);
+    font-weight:500;
+    margin-bottom:0;
+  }
+
+  .status{
+    min-height:18px;
+    text-align:center;
+    font-size:12.5px;
+    color:var(--torii);
+    margin-top:2px;
+  }
+
+  .fine-print{
+    text-align:center;
+    font-size:11px;
+    line-height:1.6;
+    color:var(--ink-soft);
+    margin-top:14px;
+  }
+  .fine-print a{color:var(--forest); text-decoration:underline;}
+
+  .spinner{
+    width:16px; height:16px;
+    border:2px solid rgba(0,0,0,0.15);
+    border-top-color:currentColor;
+    border-radius:50%;
+    animation:spin .7s linear infinite;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  .loading-overlay{
+    position:fixed; inset:0; z-index:9;
+    background:var(--cream);
+    display:flex; align-items:center; justify-content:center;
+    flex-direction:column; gap:10px;
+    transition:opacity .35s ease;
+  }
+  .loading-overlay .leaf{
+    width:30px; height:30px;
+    border:3px solid #DDE7DD;
+    border-top-color:var(--forest);
+    border-radius:50%;
+    animation:spin .8s linear infinite;
+  }
+  .loading-overlay p{color:var(--ink-soft); font-size:13px; margin:0;}
+</style>
+</head>
+<body>
+
+<!-- 初期チェック中のオーバーレイ（既ログインなら home.html へ即遷移） -->
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="leaf"></div>
+  <p>読み込み中…</p>
+</div>
+
+<div class="stage">
+  <div class="bg"></div>
+
+  <div class="content">
+    <div class="brand">
+      <span class="eyebrow">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M4 8h16M2 8l10-6 10 6"/></svg>
+        伊勢の未来をピカピカに
+      </span>
+      <h1>トレジャーシーカー伊勢</h1>
+      <p>みんなで「発見」して、<br>伊勢の未来をきれいにしよう！</p>
+    </div>
+
+    <div class="torii-rule">
+      <span></span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 6h18M5 6v14M19 6v14M2 3h20M7 10h10"/></svg>
+      <span></span>
+    </div>
+
+    <div class="auth-card">
+      <h2>ログインしてはじめる</h2>
+
+      <button class="btn btn-google" id="btnGoogle" type="button">
+        <svg viewBox="0 0 24 24"><path fill="#4285F4" d="M23.5 12.27c0-.85-.08-1.68-.22-2.47H12v4.68h6.44a5.5 5.5 0 0 1-2.39 3.6v3h3.86c2.26-2.08 3.59-5.15 3.59-8.81z"/><path fill="#34A853" d="M12 24c3.24 0 5.96-1.07 7.95-2.92l-3.86-3c-1.07.72-2.45 1.15-4.09 1.15-3.15 0-5.81-2.13-6.76-4.99H1.25v3.14A12 12 0 0 0 12 24z"/><path fill="#FBBC05" d="M5.24 14.24a7.2 7.2 0 0 1 0-4.48V6.62H1.25a12 12 0 0 0 0 10.76z"/><path fill="#EA4335" d="M12 4.77c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.69 1.25 6.62l3.99 3.14C6.19 6.9 8.85 4.77 12 4.77z"/></svg>
+        Googleで続ける
+      </button>
+
+      <button class="btn btn-apple" id="btnApple" type="button">
+        <svg viewBox="0 0 24 24" fill="#fff"><path d="M16.36 1.44c.06 1.2-.35 2.3-1.02 3.13-.72.87-1.9 1.55-3.06 1.46-.1-1.15.4-2.31 1.05-3.06.73-.85 2-1.47 3.03-1.53zM20.9 17.4c-.53 1.22-.78 1.76-1.46 2.84-.94 1.5-2.27 3.37-3.92 3.39-1.46.02-1.84-.95-3.82-.94-1.98.01-2.4.96-3.86.94-1.65-.02-2.91-1.71-3.85-3.2-2.64-4.2-2.92-9.14-1.29-11.76 1.16-1.87 2.99-2.96 4.71-2.96 1.75 0 2.85 1 4.3 1 1.4 0 2.26-1 4.3-1 1.53 0 3.15.83 4.31 2.27-3.79 2.07-3.18 7.47.58 9.42z"/></svg>
+        Appleで続ける
+      </button>
+
+      <button class="btn btn-guest" id="btnGuest" type="button">
+        ゲストとして続ける
+      </button>
+
+      <p class="status" id="statusMsg"></p>
+    </div>
+
+    <p class="fine-print">ログインすることで、発見データの記録・ランキング表示に<br>あなたのニックネームが使用されることに同意したものとします。</p>
+  </div>
+</div>
+
+<script>
+/* =====================================================================
+   Firebase 初期化
+   ※ 既存の「伊勢まちみっけ」プロジェクトと同じ firebaseConfig を
+     ここに設定してください（Auth / Firestore を共有する場合）。
+   ===================================================================== */
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT.firebaseapp.com",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_PROJECT.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+const HOME_PAGE = "home.html";
+
+const statusMsg   = document.getElementById('statusMsg');
+const overlay     = document.getElementById('loadingOverlay');
+const btnGoogle   = document.getElementById('btnGoogle');
+const btnApple    = document.getElementById('btnApple');
+const btnGuest    = document.getElementById('btnGuest');
+const allButtons  = [btnGoogle, btnApple, btnGuest];
+
+function setBusy(isBusy, activeBtn){
+  allButtons.forEach(b => b.disabled = isBusy);
+  if(isBusy && activeBtn){
+    activeBtn.dataset.label = activeBtn.innerHTML;
+    activeBtn.innerHTML = '<span class="spinner"></span> 接続中…';
+  } else {
+    allButtons.forEach(b => { if(b.dataset.label){ b.innerHTML = b.dataset.label; } });
+  }
+}
+
+function showError(err){
+  console.error(err);
+  const code = err && err.code ? err.code : '';
+  if(code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request'){
+    statusMsg.textContent = '';
+    return;
+  }
+  statusMsg.textContent = 'ログインできませんでした。もう一度お試しください。';
+}
+
+/* ---------------------------------------------------------------------
+   ユーザードキュメントの重複防止
+   uid をドキュメントIDとして固定するため、同じアカウントで
+   何度ログインしても users/{uid} は1件しか作られない。
+   --------------------------------------------------------------------- */
+async function ensureUserDoc(user, providerLabel){
+  const ref = db.collection('users').doc(user.uid);
+  const snap = await ref.get();
+
+  if(!snap.exists){
+    await ref.set({
+      uid: user.uid,
+      displayName: user.displayName || (providerLabel === 'guest' ? 'ゲスト冒険者' : '名無しの発見者'),
+      email: user.email || null,
+      photoURL: user.photoURL || null,
+      provider: providerLabel,
+      isAnonymous: !!user.isAnonymous,
+      level: 1,
+      totalFinds: 0,
+      totalCollected: 0,
+      badges: [],
+      title: '',
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      lastLogin: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  } else {
+    await ref.set({
+      lastLogin: firebase.firestore.FieldValue.serverTimestamp(),
+      // ゲスト以外はログインの度に最新のプロフィール情報へ更新
+      ...(providerLabel !== 'guest' ? {
+        displayName: user.displayName || snap.data().displayName,
+        photoURL: user.photoURL || snap.data().photoURL
+      } : {})
+    }, { merge: true });
+  }
+}
+
+async function afterLogin(user, providerLabel){
+  await ensureUserDoc(user, providerLabel);
+  window.location.href = HOME_PAGE;
+}
+
+btnGoogle.addEventListener('click', async () => {
+  statusMsg.textContent = '';
+  setBusy(true, btnGoogle);
+  try{
+    const provider = new firebase.auth.GoogleAuthProvider();
+    const result = await auth.signInWithPopup(provider);
+    await afterLogin(result.user, 'google.com');
+  }catch(err){
+    showError(err);
+    setBusy(false, btnGoogle);
+  }
+});
+
+btnApple.addEventListener('click', async () => {
+  statusMsg.textContent = '';
+  setBusy(true, btnApple);
+  try{
+    const provider = new firebase.auth.OAuthProvider('apple.com');
+    provider.addScope('email');
+    provider.addScope('name');
+    const result = await auth.signInWithPopup(provider);
+    await afterLogin(result.user, 'apple.com');
+  }catch(err){
+    showError(err);
+    setBusy(false, btnApple);
+  }
+});
+
+btnGuest.addEventListener('click', async () => {
+  statusMsg.textContent = '';
+  setBusy(true, btnGuest);
+  try{
+    const result = await auth.signInAnonymously();
+    await afterLogin(result.user, 'guest');
+  }catch(err){
+    showError(err);
+    setBusy(false, btnGuest);
+  }
+});
+
+/* 既にログイン済みならホームへ即リダイレクト。
+   未ログインの場合のみログイン画面を表示する。 */
+let resolved = false;
+auth.onAuthStateChanged((user) => {
+  if(resolved) return;
+  resolved = true;
+  if(user){
+    window.location.href = HOME_PAGE;
+  } else {
+    overlay.style.opacity = '0';
+    setTimeout(() => overlay.style.display = 'none', 350);
+  }
+});
+</script>
+</body>
+</html>

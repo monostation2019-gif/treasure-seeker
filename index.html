@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>トレジャーシーカー伊勢</title>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Kiwi+Maru:wght@400;500&family=Noto+Sans+JP:wght@400;700&display=swap" rel="stylesheet">
+
+<style>
+  :root{ --forest:#3E6B4F; --cream:#FBF8F0; --ink-soft:#7A8A7D; }
+  *{box-sizing:border-box;}
+  html,body{height:100%; margin:0;}
+  body{
+    font-family:"Noto Sans JP", sans-serif;
+    background:var(--cream);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .wrap{ text-align:center; }
+  .mark{
+    font-family:"Kiwi Maru", serif;
+    font-weight:500;
+    font-size:19px;
+    color:var(--forest);
+    margin-bottom:16px;
+  }
+  .leaf{
+    width:30px; height:30px; margin:0 auto 12px;
+    border:3px solid #DDE7DD;
+    border-top-color:var(--forest);
+    border-radius:50%;
+    animation:spin .8s linear infinite;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+  p{color:var(--ink-soft); font-size:12.5px; margin:0;}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="mark">トレジャーシーカー伊勢</div>
+    <div class="leaf"></div>
+    <p>読み込み中…</p>
+  </div>
+
+<script>
+/* =====================================================================
+   ルーティング専用ページ。
+   ログイン状態を確認し、home.html または login.html へ振り分ける。
+   firebaseConfig は login.html / home.html と同じ内容にしてください。
+   ===================================================================== */
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT.firebaseapp.com",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_PROJECT.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID"
+};
+firebase.initializeApp(firebaseConfig);
+
+let resolved = false;
+firebase.auth().onAuthStateChanged((user) => {
+  if(resolved) return;
+  resolved = true;
+  window.location.replace(user ? "home.html" : "login.html");
+});
+
+/* 万一 onAuthStateChanged が遅延した場合のフォールバック */
+setTimeout(() => {
+  if(!resolved){
+    resolved = true;
+    window.location.replace("login.html");
+  }
+}, 4000);
+</script>
+</body>
+</html>
