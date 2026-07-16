@@ -64,8 +64,9 @@
     font-size:11px; color:var(--ink-soft); max-width:150px;
   }
   .legend .title{font-weight:700; color:var(--ink); margin-bottom:6px; font-size:11.5px;}
-  .legend .bar{height:8px; border-radius:5px; background:linear-gradient(90deg,#8FCB9B,#F4D35E,#D9603B); margin-bottom:4px;}
-  .legend .row{display:flex; justify-content:space-between;}
+  .legend-row{display:flex; align-items:center; gap:6px; margin-bottom:3px;}
+  .legend-row .swatch{width:10px; height:10px; border-radius:50%; flex-shrink:0;}
+  .legend-sub{font-size:10px; color:var(--ink-soft); margin-top:6px; border-top:1px solid var(--line); padding-top:6px;}
 
   .fab-col{
     position:absolute; right:12px; bottom:96px; z-index:4;
@@ -145,9 +146,13 @@
     <div id="map"></div>
 
     <div class="legend" id="heatLegend" style="display:none;">
-      <div class="title">ゴミの多さ（ヒートマップ）</div>
-      <div class="bar"></div>
-      <div class="row"><span>少ない</span><span>多い</span></div>
+      <div class="title" id="heatLegendTitle">ゴミの多さ（すべて）</div>
+      <div class="legend-row"><span class="swatch" style="background:#4F8FE0;"></span>1〜3個</div>
+      <div class="legend-row"><span class="swatch" style="background:#4CAF6D;"></span>4〜7個</div>
+      <div class="legend-row"><span class="swatch" style="background:#F4D35E;"></span>8〜10個</div>
+      <div class="legend-row"><span class="swatch" style="background:#F0954B;"></span>11〜14個</div>
+      <div class="legend-row"><span class="swatch" style="background:#D9483B;"></span>15個以上</div>
+      <div class="legend-sub">直径10m範囲あたりの件数</div>
     </div>
 
     <div class="fab-col">
@@ -206,6 +211,7 @@ const toastEl   = document.getElementById('toast');
 const heatToggle= document.getElementById('heatToggle');
 const locateBtn = document.getElementById('locateBtn');
 const legendEl  = document.getElementById('heatLegend');
+const heatLegendTitleEl = document.getElementById('heatLegendTitle');
 const backBtn   = document.getElementById('backBtn');
 
 backBtn.addEventListener('click', () => {
@@ -336,45 +342,70 @@ function renderMarkers(){
 }
 
 /* ---------------------------------------------------------------------
-   グリッドベースの簡易ヒートマップ（外部プラグイン不使用）
-   地図表示範囲を格子状に区切り、各セルの発見件数から色の濃さを決める。
+   直径10m範囲ごとの件数を5段階の色で表示するヒートマップ（外部プラグイン不使用）。
+   カテゴリ絞り込み（chips）にも連動し、「すべて」なら全件、特定カテゴリを
+   選んでいればそのカテゴリだけで密度を再集計する。
    --------------------------------------------------------------------- */
+const HEAT_TIERS = [
+  { max: 3,        color: '#4F8FE0' }, // 1〜3個：青
+  { max: 7,        color: '#4CAF6D' }, // 4〜7個：緑
+  { max: 10,       color: '#F4D35E' }, // 8〜10個：黄
+  { max: 14,       color: '#F0954B' }, // 11〜14個：オレンジ
+  { max: Infinity, color: '#D9483B' }  // 15個以上：赤
+];
+function colorForCount(count){
+  const tier = HEAT_TIERS.find(t => count <= t.max);
+  return tier ? tier.color : HEAT_TIERS[HEAT_TIERS.length - 1].color;
+}
+
+// 10mに相当する緯度・経度の変化量を、伊勢市付近の緯度を基準に概算する
+const HEAT_CELL_LAT = 10 / 111320;
+const HEAT_CELL_LNG = 10 / (111320 * Math.cos(ISE_CENTER[0] * Math.PI / 180));
+
 function renderHeatGrid(){
   if(heatLayerGroup){ map.removeLayer(heatLayerGroup); }
   heatLayerGroup = L.layerGroup();
 
-  const cellSize = 0.004; // 約400m四方のセル
-  const counts = {};
-  let maxCount = 0;
+  // ヒートマップも現在選択中のカテゴリchipの絞り込みに従う
+  const targetReports = allReports.filter(r => {
+    if(typeof r.lat !== 'number' || typeof r.lng !== 'number') return false;
+    return activeCategory === 'all' || r.category === activeCategory;
+  });
 
-  allReports.forEach(r => {
-    if(typeof r.lat !== 'number' || typeof r.lng !== 'number') return;
-    const gx = Math.floor(r.lat / cellSize);
-    const gy = Math.floor(r.lng / cellSize);
+  // 10m四方のグリッドに落とし込んで件数と重心座標を集計する
+  const cells = {};
+  targetReports.forEach(r => {
+    const gx = Math.floor(r.lat / HEAT_CELL_LAT);
+    const gy = Math.floor(r.lng / HEAT_CELL_LNG);
     const key = gx + '_' + gy;
-    counts[key] = (counts[key] || 0) + 1;
-    if(counts[key] > maxCount) maxCount = counts[key];
+    if(!cells[key]) cells[key] = { latSum:0, lngSum:0, count:0 };
+    cells[key].latSum += r.lat;
+    cells[key].lngSum += r.lng;
+    cells[key].count += 1;
   });
 
-  Object.entries(counts).forEach(([key, count]) => {
-    const [gx, gy] = key.split('_').map(Number);
-    const lat0 = gx * cellSize, lng0 = gy * cellSize;
-    const bounds = [[lat0, lng0], [lat0 + cellSize, lng0 + cellSize]];
-    const ratio = maxCount ? count / maxCount : 0;
-    const color = ratio < 0.5
-      ? lerpColor('#8FCB9B', '#F4D35E', ratio / 0.5)
-      : lerpColor('#F4D35E', '#D9603B', (ratio - 0.5) / 0.5);
-    L.rectangle(bounds, { color, weight:0, fillOpacity:0.45 }).addTo(heatLayerGroup);
+  Object.values(cells).forEach(cell => {
+    const centerLat = cell.latSum / cell.count;
+    const centerLng = cell.lngSum / cell.count;
+    const color = colorForCount(cell.count);
+    L.circleMarker([centerLat, centerLng], {
+      radius: 16, // 画面上のピクセル半径（ズームに関わらず一定サイズで見えるようにする）
+      color,
+      weight: 0,
+      fillColor: color,
+      fillOpacity: 0.65
+    }).addTo(heatLayerGroup);
   });
 
+  updateHeatLegendTitle();
   if(heatOn) heatLayerGroup.addTo(map);
 }
-function lerpColor(a, b, t){
-  const ah = parseInt(a.slice(1),16), bh = parseInt(b.slice(1),16);
-  const ar=(ah>>16)&255, ag=(ah>>8)&255, ab=ah&255;
-  const br=(bh>>16)&255, bg=(bh>>8)&255, bb=bh&255;
-  const r=Math.round(ar+(br-ar)*t), g=Math.round(ag+(bg-ag)*t), b2=Math.round(ab+(bb-ab)*t);
-  return `rgb(${r},${g},${b2})`;
+
+function updateHeatLegendTitle(){
+  if(!heatLegendTitleEl) return;
+  const chip = document.querySelector(`.chip[data-cat="${activeCategory}"]`);
+  const label = activeCategory === 'all' ? 'すべて' : (chip ? chip.textContent.trim() : activeCategory);
+  heatLegendTitleEl.textContent = `ゴミの多さ（${label}）`;
 }
 
 /* ---------------------------------------------------------------------
@@ -400,14 +431,22 @@ document.getElementById('categoryChips').addEventListener('click', (e) => {
   chip.classList.add('active');
   activeCategory = chip.dataset.cat;
   renderMarkers();
+  renderHeatGrid();
 });
 
 heatToggle.addEventListener('click', () => {
   heatOn = !heatOn;
   heatToggle.classList.toggle('on', heatOn);
   legendEl.style.display = heatOn ? 'block' : 'none';
-  if(heatOn && heatLayerGroup){ heatLayerGroup.addTo(map); }
-  else if(heatLayerGroup){ map.removeLayer(heatLayerGroup); }
+
+  if(heatOn){
+    // ヒートマップ表示中は種類別ピンを隠し、色分けの円だけを見せる
+    map.removeLayer(markerLayer);
+    if(heatLayerGroup) heatLayerGroup.addTo(map);
+  } else {
+    if(heatLayerGroup) map.removeLayer(heatLayerGroup);
+    markerLayer.addTo(map);
+  }
 });
 
 /* ---------------------------------------------------------------------

@@ -374,13 +374,20 @@ function formatDate(ts){
    --------------------------------------------------------------------- */
 async function loadHistory(){
   try{
+    // uid の等価条件のみで取得する（orderByを併用すると複合インデックスが必要になり、
+    // 未作成の場合はクエリが失敗して一覧が反映されない原因になるため、並び替えは
+    // クライアント側で行う）
     const snap = await db.collection('reports')
       .where('uid', '==', currentUser.uid)
-      .orderBy('createdAt', 'desc')
       .limit(200)
       .get();
 
     myReports = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    myReports.sort((a, b) => {
+      const at = a.createdAt && a.createdAt.toMillis ? a.createdAt.toMillis() : 0;
+      const bt = b.createdAt && b.createdAt.toMillis ? b.createdAt.toMillis() : 0;
+      return bt - at;
+    });
 
     if(myReports.length === 0){
       historyListEl.innerHTML = `
@@ -394,7 +401,7 @@ async function loadHistory(){
     historyListEl.innerHTML = myReports.map(renderRow).join('');
     loadThumbnails();
   }catch(err){
-    console.error('履歴の取得に失敗しました', err);
+    console.error('履歴の取得に失敗しました', err.code, err.message);
     historyListEl.innerHTML = `
       <div class="history-empty">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 9v4M12 17h.01"/><circle cx="12" cy="12" r="9"/></svg>
