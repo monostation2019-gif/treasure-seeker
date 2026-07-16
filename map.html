@@ -58,15 +58,18 @@
   #map{position:absolute; inset:0;}
 
   .legend{
-    position:absolute; left:12px; bottom:96px; z-index:900;
-    background:rgba(255,255,255,0.95); border-radius:14px;
-    padding:10px 12px; box-shadow:0 8px 20px rgba(44,78,58,0.18);
-    font-size:11px; color:var(--ink-soft); max-width:150px;
+    position:absolute; left:12px; right:12px; bottom:96px; z-index:900;
+    background:rgba(255,255,255,0.95); border-radius:999px;
+    padding:8px 14px; box-shadow:0 8px 20px rgba(44,78,58,0.18);
+    display:flex; align-items:center; gap:8px;
+    overflow-x:auto; scrollbar-width:none;
+    white-space:nowrap;
   }
-  .legend .title{font-weight:700; color:var(--ink); margin-bottom:6px; font-size:11.5px;}
-  .legend-row{display:flex; align-items:center; gap:6px; margin-bottom:3px;}
-  .legend-row .swatch{width:10px; height:10px; border-radius:50%; flex-shrink:0;}
-  .legend-sub{font-size:10px; color:var(--ink-soft); margin-top:6px; border-top:1px solid var(--line); padding-top:6px;}
+  .legend::-webkit-scrollbar{display:none;}
+  .legend .title{font-weight:700; color:var(--ink); font-size:10.5px; flex-shrink:0;}
+  .legend-row{display:flex; align-items:center; gap:3px; flex-shrink:0; font-size:10px; color:var(--ink-soft);}
+  .legend-row .swatch{width:8px; height:8px; border-radius:50%; flex-shrink:0;}
+  .legend-sub{font-size:9px; color:var(--ink-soft); flex-shrink:0; padding-left:6px; margin-left:2px; border-left:1px solid var(--line);}
 
   .fab-col{
     position:absolute; right:12px; bottom:96px; z-index:900;
@@ -159,12 +162,12 @@
 
     <div class="legend" id="heatLegend">
       <div class="title" id="heatLegendTitle">ゴミの多さ（すべて）</div>
-      <div class="legend-row"><span class="swatch" style="background:#4F8FE0;"></span>1〜3個</div>
-      <div class="legend-row"><span class="swatch" style="background:#4CAF6D;"></span>4〜7個</div>
-      <div class="legend-row"><span class="swatch" style="background:#F4D35E;"></span>8〜10個</div>
-      <div class="legend-row"><span class="swatch" style="background:#F0954B;"></span>11〜14個</div>
-      <div class="legend-row"><span class="swatch" style="background:#D9483B;"></span>15個以上</div>
-      <div class="legend-sub">直径10m範囲あたりの件数</div>
+      <div class="legend-row"><span class="swatch" style="background:#4F8FE0;"></span>1〜3</div>
+      <div class="legend-row"><span class="swatch" style="background:#4CAF6D;"></span>4〜7</div>
+      <div class="legend-row"><span class="swatch" style="background:#F4D35E;"></span>8〜10</div>
+      <div class="legend-row"><span class="swatch" style="background:#F0954B;"></span>11〜14</div>
+      <div class="legend-row"><span class="swatch" style="background:#D9483B;"></span>15+</div>
+      <div class="legend-sub">件数/10m</div>
     </div>
 
     <div class="fab-col-top">
