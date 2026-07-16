@@ -156,6 +156,9 @@
     </div>
 
     <div class="fab-col">
+      <button class="fab" id="layerToggle" title="衛星写真に切替">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+      </button>
       <button class="fab" id="locateBtn" title="現在地へ移動">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
       </button>
@@ -208,6 +211,7 @@ const ISE_CITY_BOUNDS = L.latLngBounds([34.375, 136.615], [34.585, 136.825]);
 const overlay   = document.getElementById('loadingOverlay');
 const toastEl   = document.getElementById('toast');
 const locateBtn = document.getElementById('locateBtn');
+const layerToggle = document.getElementById('layerToggle');
 const legendEl  = document.getElementById('heatLegend');
 const heatLegendTitleEl = document.getElementById('heatLegendTitle');
 const backBtn   = document.getElementById('backBtn');
@@ -230,10 +234,38 @@ function showToast(msg){
 
 const map = L.map('map', { zoomControl:false }).fitBounds(ISE_CITY_BOUNDS);
 L.control.zoom({ position:'bottomright' }).addTo(map);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+
+/* ---------------------------------------------------------------------
+   通常地図（OSM）と衛星写真（Esri World Imagery）の2種類のタイルを切替できるようにする
+   --------------------------------------------------------------------- */
+const streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   maxZoom: 19,
   attribution: '&copy; OpenStreetMap contributors'
-}).addTo(map);
+});
+const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+  maxZoom: 19,
+  attribution: 'Tiles &copy; Esri'
+});
+let mapMode = 'street';
+streetLayer.addTo(map);
+
+layerToggle.addEventListener('click', () => {
+  if(mapMode === 'street'){
+    map.removeLayer(streetLayer);
+    satelliteLayer.addTo(map);
+    mapMode = 'satellite';
+    layerToggle.classList.add('on');
+    layerToggle.title = '通常地図に切替';
+    showToast('衛星写真表示に切り替えました');
+  } else {
+    map.removeLayer(satelliteLayer);
+    streetLayer.addTo(map);
+    mapMode = 'street';
+    layerToggle.classList.remove('on');
+    layerToggle.title = '衛星写真に切替';
+    showToast('通常地図表示に切り替えました');
+  }
+});
 
 let allReports = []; // { id, lat, lng, category, memo, ... }
 let activeCategory = 'all';

@@ -179,6 +179,22 @@
   .edit-sheet-footer .edit-cancel{background:#fff; color:var(--ink);}
   .edit-sheet-footer .edit-save{background:var(--forest); color:#fff; border-color:var(--forest);}
   .edit-sheet-footer .edit-save:disabled{opacity:.55; cursor:not-allowed;}
+
+  /* ---- 削除確認モーダル（ブラウザ標準confirm()に依存しない） ---- */
+  .confirm-overlay{
+    position:fixed; inset:0; z-index:70; background:rgba(20,28,20,0.5);
+    display:none; align-items:center; justify-content:center; padding:24px;
+  }
+  .confirm-overlay.show{display:flex;}
+  .confirm-sheet{
+    width:100%; max-width:300px; background:var(--cream); border-radius:18px;
+    padding:20px 18px; box-shadow:0 16px 40px rgba(0,0,0,0.25);
+  }
+  .confirm-message{font-size:13.5px; color:var(--ink); line-height:1.7; margin:0 0 16px; text-align:center;}
+  .confirm-actions{display:flex; gap:10px;}
+  .confirm-actions button{flex:1; padding:12px; border-radius:12px; font-size:13.5px; font-weight:700; cursor:pointer; border:1.5px solid var(--line);}
+  .confirm-cancel{background:#fff; color:var(--ink);}
+  .confirm-ok{background:var(--torii); color:#fff; border-color:var(--torii);}
 </style>
 </head>
 <body>
@@ -305,6 +321,17 @@
   </div>
 </div>
 
+<!-- 削除確認モーダル（ブラウザ標準のconfirm()は環境によって出ないことがあるため自前で用意） -->
+<div class="confirm-overlay" id="deleteConfirmOverlay">
+  <div class="confirm-sheet">
+    <p class="confirm-message">この記録を削除しますか？<br>この操作は取り消せません。</p>
+    <div class="confirm-actions">
+      <button class="confirm-cancel" id="deleteCancelBtn" type="button">キャンセル</button>
+      <button class="confirm-ok" id="deleteOkBtn" type="button">削除する</button>
+    </div>
+  </div>
+</div>
+
 <script>
 /* =====================================================================
    Firebase 初期化（他ページと同じ設定）
@@ -340,6 +367,11 @@ const editPhotoInput      = document.getElementById('editPhotoInput');
 const editTownInput       = document.getElementById('editTownInput');
 const editMemoInput       = document.getElementById('editMemoInput');
 const editMemoCount       = document.getElementById('editMemoCount');
+
+const deleteConfirmOverlay = document.getElementById('deleteConfirmOverlay');
+const deleteCancelBtn      = document.getElementById('deleteCancelBtn');
+const deleteOkBtn          = document.getElementById('deleteOkBtn');
+let pendingDeleteId = null;
 
 /* 種類ごとの絵文字（発見する / クリーンマップと同じマスター） */
 const CATEGORY_EMOJI = {
@@ -389,17 +421,7 @@ async function loadHistory(){
       return bt - at;
     });
 
-    if(myReports.length === 0){
-      historyListEl.innerHTML = `
-        <div class="history-empty">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 9v4M12 17h.01"/><circle cx="12" cy="12" r="9"/></svg>
-          まだ発見・回収の記録がありません
-        </div>`;
-      return;
-    }
-
-    historyListEl.innerHTML = myReports.map(renderRow).join('');
-    loadThumbnails();
+    renderHistoryList();
   }catch(err){
     console.error('履歴の取得に失敗しました', err.code, err.message);
     historyListEl.innerHTML = `
@@ -408,6 +430,20 @@ async function loadHistory(){
         履歴を取得できませんでした
       </div>`;
   }
+}
+
+/* 一覧全体の再描画（空状態も含めて一元管理する） */
+function renderHistoryList(){
+  if(myReports.length === 0){
+    historyListEl.innerHTML = `
+      <div class="history-empty">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 9v4M12 17h.01"/><circle cx="12" cy="12" r="9"/></svg>
+        まだ発見・回収の記録がありません
+      </div>`;
+    return;
+  }
+  historyListEl.innerHTML = myReports.map(renderRow).join('');
+  loadThumbnails();
 }
 
 function renderRow(r){
@@ -459,7 +495,7 @@ historyListEl.addEventListener('click', (e) => {
   if(editBtn){ openEditModal(editBtn.dataset.id); return; }
 
   const deleteBtn = e.target.closest('.delete-btn');
-  if(deleteBtn){ handleDelete(deleteBtn.dataset.id); return; }
+  if(deleteBtn){ openDeleteConfirm(deleteBtn.dataset.id); return; }
 
   const row = e.target.closest('.history-row');
   if(row){
@@ -471,36 +507,53 @@ historyListEl.addEventListener('click', (e) => {
 });
 
 /* ---------------------------------------------------------------------
-   削除
+   削除確認モーダル
+   （ブラウザ標準の confirm() は端末・PWA表示モードによっては表示されず、
+   タップしても何も起きないように見えるケースがあるため自前で実装する）
    --------------------------------------------------------------------- */
-async function handleDelete(id){
+function openDeleteConfirm(id){
+  pendingDeleteId = id;
+  deleteConfirmOverlay.classList.add('show');
+}
+function closeDeleteConfirm(){
+  deleteConfirmOverlay.classList.remove('show');
+  pendingDeleteId = null;
+}
+deleteCancelBtn.addEventListener('click', closeDeleteConfirm);
+deleteConfirmOverlay.addEventListener('click', (e) => {
+  if(e.target === deleteConfirmOverlay) closeDeleteConfirm(); // 背景タップでも閉じる
+});
+deleteOkBtn.addEventListener('click', async () => {
+  const id = pendingDeleteId;
+  closeDeleteConfirm();
+  if(id) await performDelete(id);
+});
+
+async function performDelete(id){
   const r = myReports.find(x => x.id === id);
   if(!r) return;
-  if(!confirm('この記録を削除しますか？この操作は取り消せません。')) return;
+
+  deleteOkBtn.disabled = true;
 
   try{
-    // まず記録本体と写真を削除する。ここが成功すれば「削除」自体は完了とみなす。
+    // まず記録本体を削除する。ここが成功すれば「削除」自体は完了とみなす。
     await db.collection('reports').doc(id).delete();
-    await db.collection('reportPhotos').doc(id).delete().catch(() => {});
   }catch(err){
-    console.error('削除に失敗しました', err);
-    alert('削除に失敗しました。もう一度お試しください。');
+    console.error('削除に失敗しました', err && err.code, err && err.message);
+    alert(`削除に失敗しました。もう一度お試しください。${err && err.code ? `\n(${err.code})` : ''}`);
+    deleteOkBtn.disabled = false;
     return;
   }
+  deleteOkBtn.disabled = false;
 
-  // 削除が確定したので、統計更新の成否に関わらず先に画面から反映する
+  // 写真の削除は付随処理（失敗しても致命的ではないので握りつぶす）
+  await db.collection('reportPhotos').doc(id).delete().catch(() => {});
+
+  // 削除が確定したので、ローカル一覧を更新して再描画する
   myReports = myReports.filter(x => x.id !== id);
-  const rowEl = historyListEl.querySelector(`.history-row[data-id="${CSS.escape(id)}"]`);
-  if(rowEl) rowEl.remove();
-  if(myReports.length === 0){
-    historyListEl.innerHTML = `
-      <div class="history-empty">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 9v4M12 17h.01"/><circle cx="12" cy="12" r="9"/></svg>
-        まだ発見・回収の記録がありません
-      </div>`;
-  }
+  renderHistoryList();
 
-  // 統計(totalFinds/totalCollected)の更新は付随処理。ここが権限エラー等で
+  // 統計(totalFinds/totalCollected)の更新も付随処理。ここが権限エラー等で
   // 失敗しても、既に削除・画面反映は完了しているのでユーザーには影響させない。
   try{
     await db.collection('users').doc(currentUser.uid).set({
