@@ -221,8 +221,8 @@
       <div class="card">
         <div class="toggle-row">
           <div>
-            <div class="toggle-text">大型ゴミを回収した</div>
-            <div class="toggle-sub">粗大ゴミなどを実際に回収した場合はON</div>
+            <div class="toggle-text">ゴミを回収した</div>
+            <div class="toggle-sub">実際に回収した場合はON</div>
           </div>
           <label class="switch">
             <input type="checkbox" id="bulkyToggle">
@@ -695,15 +695,7 @@ submitBtn.addEventListener('click', async () => {
     doneOverlay.classList.add('show');
   }catch(err){
     console.error('発見の記録に失敗しました', err);
-    const code = (err && err.code) ? err.code : '';
-    const msg  = (err && err.message) ? err.message : String(err);
-    let hint = '';
-    if(code === 'permission-denied'){
-      hint = '\n\n→ Firestoreのセキュリティルールで書き込みが拒否されています。Firebase Console → Firestore Database → ルール を確認してください。';
-    } else if(code === 'unavailable' || code === 'auth/network-request-failed'){
-      hint = '\n\n→ Firestoreへの接続に失敗しました。通信環境や、プロジェクトでFirestore Databaseが作成済みかを確認してください。';
-    }
-    alert('記録に失敗しました。\n[' + code + '] ' + msg + hint);
+    alert('記録に失敗しました。通信状況を確認してもう一度お試しください。');
   }finally{
     setSubmitBusy(false);
   }
