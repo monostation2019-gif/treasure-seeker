@@ -256,6 +256,32 @@ let heatOn = false;
 let heatLayerGroup = null;
 
 /* ---------------------------------------------------------------------
+   履歴ページなどから ?lat=..&lng=..&id=.. 付きで遷移してきた場合、
+   その地点へ地図を移動し、該当する報告のポップアップを開く。
+   --------------------------------------------------------------------- */
+const jumpParams = new URLSearchParams(window.location.search);
+const jumpLat = parseFloat(jumpParams.get('lat'));
+const jumpLng = parseFloat(jumpParams.get('lng'));
+const jumpId  = jumpParams.get('id');
+let didJumpToReport = false;
+
+function maybeJumpToReport(){
+  if(didJumpToReport) return;
+  if(Number.isNaN(jumpLat) || Number.isNaN(jumpLng)) return;
+  didJumpToReport = true;
+  map.setView([jumpLat, jumpLng], 17);
+  if(!jumpId) return;
+  setTimeout(() => {
+    markerLayer.eachLayer(m => {
+      const ll = m.getLatLng();
+      if(Math.abs(ll.lat - jumpLat) < 1e-6 && Math.abs(ll.lng - jumpLng) < 1e-6){
+        m.openPopup();
+      }
+    });
+  }, 300);
+}
+
+/* ---------------------------------------------------------------------
    写真の遅延読み込み（reportPhotos コレクションを別管理）
    マーカーをクリックした時だけ該当写真を取得する。
    --------------------------------------------------------------------- */
@@ -360,6 +386,7 @@ function subscribeReports(){
     allReports = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     renderMarkers();
     renderHeatGrid();
+    maybeJumpToReport();
   }, err => {
     console.error('reportsの取得に失敗しました', err);
     showToast('地図データを取得できませんでした');

@@ -40,12 +40,14 @@
 
   main{flex:1; padding:16px 16px 30px;}
 
-  .period-toggle{display:flex; gap:8px; margin-bottom:14px;}
+  .period-toggle{display:flex; gap:8px; margin-bottom:6px;}
   .period-toggle button{
     flex:1; padding:9px; border-radius:12px; border:1.5px solid var(--line);
     background:var(--card); color:var(--ink-soft); font-size:13px; font-weight:700; cursor:pointer;
   }
   .period-toggle button.active{background:var(--forest-soft); border-color:var(--forest); color:var(--forest-deep);}
+
+  .period-range{text-align:center; font-size:12px; color:var(--ink-soft); margin-bottom:14px;}
 
   .rank-card{background:var(--card); border-radius:18px; padding:6px; box-shadow:0 6px 18px rgba(44,78,58,0.07); min-height:120px;}
   .rank-row{display:flex; align-items:center; gap:12px; padding:13px 12px;}
@@ -118,6 +120,7 @@
       <button data-period="month">月間</button>
       <button data-period="all">累計</button>
     </div>
+    <div class="period-range" id="periodRange"></div>
 
     <div class="rank-card" id="rankCard">
       <div class="skeleton-row"><div class="sk" style="width:32px;height:32px;border-radius:50%;"></div><div class="sk" style="flex:1;height:14px;"></div></div>
@@ -164,31 +167,60 @@ const db = firebase.firestore();
 
 const LOGIN_PAGE = "login.html";
 
-const overlay   = document.getElementById('loadingOverlay');
-const rankCard  = document.getElementById('rankCard');
-const scopeTabs = document.getElementById('scopeTabs');
+const overlay      = document.getElementById('loadingOverlay');
+const rankCard     = document.getElementById('rankCard');
+const scopeTabs    = document.getElementById('scopeTabs');
 const periodToggle = document.querySelector('.period-toggle');
+const periodRangeEl = document.getElementById('periodRange');
 
 let currentScope = 'town';   // town / neighborhoodAssoc / school / company の Firestore フィールド名
-let currentPeriod = 'week'; // week / month / all
+let currentPeriod = 'week'; // week / month / all（累計＝今年）
 
 function escapeHtml(str){
   return String(str).replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
 }
-function startOfWeek(){
-  // 月曜始まりで今週の開始時刻を計算
+
+/* 各期間の開始日（Dateオブジェクト）を計算する。
+   週間：日曜始まり〜土曜終わり。月間・累計（今年）は、次の週/月/年をまたいだ時点で
+   自動的に新しい期間に切り替わる（＝現在時刻を基準に毎回計算し直しているだけ）。 */
+function startOfWeekDate(){
   const d = new Date();
-  const day = d.getDay(); // 0=日,1=月,...6=土
-  const diffToMonday = (day === 0) ? -6 : (1 - day);
-  d.setDate(d.getDate() + diffToMonday);
+  d.setDate(d.getDate() - d.getDay()); // d.getDay(): 0=日,1=月,...6=土 → 日曜まで戻す
   d.setHours(0,0,0,0);
-  return firebase.firestore.Timestamp.fromDate(d);
+  return d;
 }
-function startOfMonth(){
+function startOfMonthDate(){
   const d = new Date();
   d.setDate(1);
   d.setHours(0,0,0,0);
-  return firebase.firestore.Timestamp.fromDate(d);
+  return d;
+}
+function startOfYearDate(){
+  const d = new Date();
+  d.setMonth(0, 1);
+  d.setHours(0,0,0,0);
+  return d;
+}
+function startOfWeek(){ return firebase.firestore.Timestamp.fromDate(startOfWeekDate()); }
+function startOfMonth(){ return firebase.firestore.Timestamp.fromDate(startOfMonthDate()); }
+function startOfYear(){ return firebase.firestore.Timestamp.fromDate(startOfYearDate()); }
+
+/* 期間トグルの下に「7月19日〜7月25日」「2026年7月」「2026年」のように
+   現在選択中の期間の範囲を表示する。 */
+function updatePeriodRangeLabel(){
+  const now = new Date();
+  let text = '';
+  if(currentPeriod === 'week'){
+    const start = startOfWeekDate();
+    const end = new Date(start);
+    end.setDate(end.getDate() + 6); // 土曜日
+    text = `${start.getMonth()+1}月${start.getDate()}日〜${end.getMonth()+1}月${end.getDate()}日`;
+  }else if(currentPeriod === 'month'){
+    text = `${now.getFullYear()}年${now.getMonth()+1}月`;
+  }else{
+    text = `${now.getFullYear()}年`;
+  }
+  periodRangeEl.textContent = text;
 }
 
 /* ---------------------------------------------------------------------
@@ -199,6 +231,7 @@ function startOfMonth(){
      まだ値が入っていないカテゴリは自然に「データがありません」表示になる。
    --------------------------------------------------------------------- */
 async function loadRanking(){
+  updatePeriodRangeLabel();
   rankCard.innerHTML = `
     <div class="skeleton-row"><div class="sk" style="width:32px;height:32px;border-radius:50%;"></div><div class="sk" style="flex:1;height:14px;"></div></div>
     <div class="skeleton-row"><div class="sk" style="width:32px;height:32px;border-radius:50%;"></div><div class="sk" style="flex:1;height:14px;"></div></div>
@@ -210,8 +243,10 @@ async function loadRanking(){
       query = query.where('createdAt', '>=', startOfWeek());
     }else if(currentPeriod === 'month'){
       query = query.where('createdAt', '>=', startOfMonth());
+    }else{
+      // 累計＝今年の範囲。年をまたぐと自動的に新しい年のデータにリセットされる
+      query = query.where('createdAt', '>=', startOfYear());
     }
-    // currentPeriod === 'all' の場合は期間フィルタなし
     const snap = await query.get();
 
     const counts = {};
