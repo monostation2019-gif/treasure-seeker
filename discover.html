@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>トレジャーシーカー伊勢 | 発見する</title>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Kiwi+Maru:wght@400;500&family=Noto+Sans+JP:wght@400;500;700;900&display=swap" rel="stylesheet">
+
+<style>
+  :root{
+    --forest:#3E6B4F; --forest-deep:#2C4E3A; --forest-soft:#EAF3EC;
+    --cream:#FBF8F0; --card:#FFFFFF; --torii:#B5502F; --gold:#E3A73B;
+    --ink:#233127; --ink-soft:#7A8A7D; --line:#E7E2D4;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{height:100%; margin:0;}
+  body{font-family:"Noto Sans JP", sans-serif; color:var(--ink); background:var(--forest-soft); display:flex; justify-content:center;}
+
+  .stage{width:100%; max-width:480px; min-height:100vh; min-height:100dvh; background:var(--cream); display:flex; flex-direction:column; position:relative;}
+
+  header{
+    background:linear-gradient(155deg, var(--forest) 0%, var(--forest-deep) 100%);
+    padding:calc(env(safe-area-inset-top,0px) + 16px) 18px 20px;
+    border-radius:0 0 26px 26px;
+    color:#fff; position:relative;
+  }
+  .header-top{display:flex; align-items:center; gap:10px;}
+  .back-btn{
+    width:32px; height:32px; border-radius:50%; flex-shrink:0;
+    background:rgba(255,255,255,0.16); border:1px solid rgba(255,255,255,0.28);
+    display:flex; align-items:center; justify-content:center;
+    color:#fff; cursor:pointer;
+  }
+  .back-btn svg{width:16px; height:16px;}
+  header h1{font-family:"Kiwi Maru", serif; font-weight:500; font-size:18px; margin:0;}
+  header p{font-size:12px; color:#D8E7DC; margin:4px 0 0;}
+
+  main{flex:1; padding:18px 18px 110px;}
+
+  .card{
+    background:var(--card); border-radius:18px; padding:16px;
+    box-shadow:0 6px 16px rgba(44,78,58,0.07); margin-bottom:16px;
+  }
+  .card-label{font-size:12.5px; font-weight:700; color:var(--ink-soft); margin-bottom:10px; display:flex; align-items:center; justify-content:space-between;}
+  .required-tag{font-size:10px; color:var(--torii); background:#FCEFE3; padding:2px 7px; border-radius:999px; font-weight:700;}
+  .optional-tag{font-size:10px; color:var(--ink-soft); background:var(--forest-soft); padding:2px 7px; border-radius:999px; font-weight:700;}
+
+  /* カテゴリ選択 */
+  .cat-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:8px;}
+  .cat-btn{
+    display:flex; flex-direction:column; align-items:center; gap:5px;
+    padding:12px 4px; border-radius:14px; border:1.5px solid var(--line);
+    background:#fff; cursor:pointer; font-size:11px; color:var(--ink);
+  }
+  .cat-btn .emoji{font-size:20px;}
+  .cat-btn.active{border-color:var(--forest); background:var(--forest-soft); color:var(--forest-deep); font-weight:700;}
+
+  /* 大型ゴミトグル */
+  .toggle-row{display:flex; align-items:center; justify-content:space-between;}
+  .toggle-text{font-size:13.5px;}
+  .toggle-sub{font-size:11px; color:var(--ink-soft); margin-top:2px;}
+  .switch{position:relative; width:46px; height:26px; flex-shrink:0;}
+  .switch input{opacity:0; width:0; height:0;}
+  .switch-track{
+    position:absolute; inset:0; background:#DDE3D9; border-radius:999px;
+    transition:background .15s ease; cursor:pointer;
+  }
+  .switch-track::before{
+    content:""; position:absolute; width:20px; height:20px; left:3px; top:3px;
+    background:#fff; border-radius:50%; transition:transform .15s ease;
+    box-shadow:0 1px 3px rgba(0,0,0,0.25);
+  }
+  .switch input:checked + .switch-track{background:var(--torii);}
+  .switch input:checked + .switch-track::before{transform:translateX(20px);}
+
+  /* 写真 */
+  .photo-zone{
+    border:1.5px dashed var(--line); border-radius:14px;
+    display:flex; align-items:center; justify-content:center;
+    height:150px; position:relative; overflow:hidden; background:#FAF8F1;
+    color:var(--ink-soft); font-size:12.5px; cursor:pointer;
+  }
+  .photo-zone img{width:100%; height:100%; object-fit:cover; position:absolute; inset:0;}
+  .photo-zone .hint{display:flex; flex-direction:column; align-items:center; gap:6px;}
+  .photo-zone .hint svg{width:26px; height:26px;}
+  .photo-remove{
+    position:absolute; top:8px; right:8px; z-index:2;
+    width:26px; height:26px; border-radius:50%; background:rgba(20,28,20,0.55);
+    color:#fff; display:flex; align-items:center; justify-content:center; border:none; cursor:pointer;
+  }
+  .photo-remove svg{width:13px; height:13px;}
+
+  /* 位置情報 */
+  .loc-btn{
+    width:100%; display:flex; align-items:center; justify-content:center; gap:8px;
+    padding:12px; border-radius:12px; border:1.5px solid var(--forest);
+    background:var(--forest-soft); color:var(--forest-deep); font-weight:700; font-size:13.5px;
+    cursor:pointer;
+  }
+  .loc-btn svg{width:16px; height:16px;}
+  .loc-btn.got{background:var(--forest); color:#fff; border-color:var(--forest);}
+  .loc-status{font-size:11.5px; color:var(--ink-soft); margin-top:8px; text-align:center;}
+  .loc-status.ok{color:var(--forest-deep); font-weight:700;}
+
+  #miniMap{width:100%; height:150px; border-radius:14px; margin-top:10px; display:none;}
+  .loc-hint{font-size:10.5px; color:var(--ink-soft); margin-top:6px; text-align:center;}
+
+  /* テキスト入力 */
+  textarea, input[type=text]{
+    width:100%; border:1.5px solid var(--line); border-radius:12px;
+    padding:11px 12px; font-family:inherit; font-size:13.5px; color:var(--ink);
+    resize:none; background:#fff;
+  }
+  textarea:focus, input[type=text]:focus{outline:none; border-color:var(--forest);}
+  .char-count{text-align:right; font-size:10.5px; color:var(--ink-soft); margin-top:4px;}
+
+  /* 送信 */
+  .submit-bar{
+    position:fixed; left:50%; transform:translateX(-50%); bottom:0;
+    width:100%; max-width:480px; background:var(--card);
+    border-top:1px solid var(--line); padding:12px 18px calc(env(safe-area-inset-bottom,0px) + 12px);
+    z-index:20;
+  }
+  .submit-btn{
+    width:100%; padding:14px; border:none; border-radius:14px;
+    background:var(--torii); color:#fff; font-size:15px; font-weight:700;
+    display:flex; align-items:center; justify-content:center; gap:8px; cursor:pointer;
+  }
+  .submit-btn:disabled{opacity:0.5; cursor:not-allowed;}
+  .spinner{width:16px; height:16px; border:2px solid rgba(255,255,255,0.4); border-top-color:#fff; border-radius:50%; animation:spin .7s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  .loading-overlay{position:fixed; inset:0; z-index:99; background:var(--cream); display:flex; align-items:center; justify-content:center; flex-direction:column; gap:10px; transition:opacity .35s ease;}
+  .loading-overlay .leaf{width:30px; height:30px; border:3px solid #DDE7DD; border-top-color:var(--forest); border-radius:50%; animation:spin .8s linear infinite;}
+  .loading-overlay p{color:var(--ink-soft); font-size:13px; margin:0;}
+
+  /* 完了オーバーレイ */
+  .done-overlay{
+    position:fixed; inset:0; z-index:50; background:rgba(20,28,20,0.55);
+    display:none; align-items:center; justify-content:center; padding:24px;
+  }
+  .done-overlay.show{display:flex;}
+  .done-card{
+    background:#fff; border-radius:22px; padding:28px 22px; text-align:center;
+    max-width:340px; width:100%;
+  }
+  .done-card .ico{
+    width:56px; height:56px; border-radius:50%; background:var(--forest-soft); color:var(--forest);
+    display:flex; align-items:center; justify-content:center; margin:0 auto 14px;
+  }
+  .done-card .ico svg{width:28px; height:28px;}
+  .done-card h2{font-family:"Kiwi Maru", serif; font-weight:500; font-size:17px; margin:0 0 8px; color:var(--forest-deep);}
+  .done-card p{font-size:12.5px; color:var(--ink-soft); margin:0 0 18px; line-height:1.6;}
+  .done-actions{display:flex; gap:10px;}
+  .done-actions button{
+    flex:1; padding:11px; border-radius:12px; font-size:13px; font-weight:700; cursor:pointer; border:1.5px solid var(--line);
+  }
+  .done-actions .primary{background:var(--forest); color:#fff; border-color:var(--forest);}
+  .done-actions .secondary{background:#fff; color:var(--ink);}
+
+  nav.bottom{
+    position:fixed; left:50%; transform:translateX(-50%); bottom:0;
+    width:100%; max-width:480px; background:var(--card);
+    border-top:1px solid var(--line); display:flex;
+    padding:8px 6px calc(env(safe-area-inset-bottom,0px) + 8px); z-index:10;
+  }
+  nav.bottom a{flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; text-decoration:none; color:var(--ink-soft); font-size:10.5px; padding:4px 0;}
+  nav.bottom a svg{width:20px; height:20px;}
+  nav.bottom a.active{color:var(--forest-deep); font-weight:700;}
+  nav.bottom a.active svg{color:var(--forest);}
+</style>
+</head>
+<body>
+
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="leaf"></div>
+  <p>読み込み中…</p>
+</div>
+
+<div class="stage">
+  <header>
+    <div class="header-top">
+      <button class="back-btn" id="backBtn" title="戻る">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+      <div>
+        <h1>発見する</h1>
+        <p>見つけたゴミを記録しよう</p>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <form id="discoverForm">
+
+      <div class="card">
+        <div class="card-label">
+          <span>ゴミの種類</span>
+          <span class="required-tag">必須</span>
+        </div>
+        <div class="cat-grid" id="catGrid">
+          <div class="cat-btn" data-cat="ペットボトル"><span class="emoji">💧</span>ペットボトル</div>
+          <div class="cat-btn" data-cat="たばこ吸い殻"><span class="emoji">🚬</span>たばこ吸い殻</div>
+          <div class="cat-btn" data-cat="空き缶"><span class="emoji">🥫</span>空き缶</div>
+          <div class="cat-btn" data-cat="プラスチック"><span class="emoji">♻️</span>プラスチック</div>
+          <div class="cat-btn" data-cat="危険物"><span class="emoji">⚠️</span>危険物</div>
+          <div class="cat-btn" data-cat="ビン"><span class="emoji">🍾</span>ビン</div>
+          <div class="cat-btn" data-cat="紙類"><span class="emoji">📄</span>紙類</div>
+          <div class="cat-btn" data-cat="大型ゴミ"><span class="emoji">🛋️</span>大型ゴミ</div>
+          <div class="cat-btn" data-cat="その他"><span class="emoji">🗑️</span>その他</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="toggle-row">
+          <div>
+            <div class="toggle-text">大型ゴミを回収した</div>
+            <div class="toggle-sub">粗大ゴミなどを実際に回収した場合はON</div>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="bulkyToggle">
+            <span class="switch-track"></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-label">
+          <span>写真</span>
+          <span class="optional-tag">任意</span>
+        </div>
+        <div class="photo-zone" id="photoZone">
+          <div class="hint" id="photoHint">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+            タップして撮影・選択
+          </div>
+          <img id="photoPreview" style="display:none;" alt="">
+          <button type="button" class="photo-remove" id="photoRemoveBtn" style="display:none;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          </button>
+        </div>
+        <input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none;">
+      </div>
+
+      <div class="card">
+        <div class="card-label">
+          <span>位置情報</span>
+          <span class="required-tag">必須</span>
+        </div>
+        <button type="button" class="loc-btn" id="locBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
+          <span id="locBtnText">現在地を取得する</span>
+        </button>
+        <div class="loc-status" id="locStatus"></div>
+        <div id="miniMap"></div>
+        <div class="loc-hint" id="locHint" style="display:none;">地図をタップするとピンの位置を調整できます</div>
+      </div>
+
+      <div class="card">
+        <div class="card-label">
+          <span>エリア（町名など）</span>
+          <span class="optional-tag">任意</span>
+        </div>
+        <input type="text" id="townInput" placeholder="例）伊勢市宇治館町" maxlength="20">
+      </div>
+
+      <div class="card">
+        <div class="card-label">
+          <span>メモ</span>
+          <span class="optional-tag">任意</span>
+        </div>
+        <textarea id="memoInput" rows="3" maxlength="140" placeholder="気づいたことがあれば記録しておこう"></textarea>
+        <div class="char-count"><span id="memoCount">0</span>/140</div>
+      </div>
+
+    </form>
+  </main>
+
+  <div class="submit-bar">
+    <button class="submit-btn" id="submitBtn" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+      この発見を記録する
+    </button>
+  </div>
+
+  <div class="done-overlay" id="doneOverlay">
+    <div class="done-card">
+      <div class="ico">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
+      </div>
+      <h2>記録しました！</h2>
+      <p>発見をありがとうございます。<br>伊勢の未来が、また少しピカピカになりました。</p>
+      <div class="done-actions">
+        <button class="secondary" id="doneHomeBtn" type="button">ホームへ</button>
+        <button class="primary" id="doneAgainBtn" type="button">もう1件記録する</button>
+      </div>
+    </div>
+  </div>
+
+  <nav class="bottom">
+    <a href="home.html">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>
+      ホーム
+    </a>
+    <a href="map.html">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 20l-6-3V4l6 3 6-3 6 3v13l-6-3-6 3z"/><path d="M9 7v13M15 4v13"/></svg>
+      マップ
+    </a>
+    <a class="active" href="discover.html">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+      発見
+    </a>
+    <a href="mypage.html">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>
+      マイページ
+    </a>
+  </nav>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+
+<script>
+/* =====================================================================
+   Firebase 初期化（他ページと同じ設定）
+   ===================================================================== */
+const firebaseConfig = {
+  apiKey: "AIzaSyB7f8QThoqYc-iDuMhKqp3MGBRAhln9ZhI",
+  authDomain: "treasure-seeker-ise.firebaseapp.com",
+  projectId: "treasure-seeker-ise",
+  storageBucket: "treasure-seeker-ise.firebasestorage.app",
+  messagingSenderId: "278199675502",
+  appId: "1:278199675502:web:295dfa975a03707f27947f"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+const LOGIN_PAGE = "login.html";
+const ISE_CENTER = [34.4859, 136.7096];
+
+const overlay        = document.getElementById('loadingOverlay');
+const backBtn         = document.getElementById('backBtn');
+const catGrid          = document.getElementById('catGrid');
+const bulkyToggle       = document.getElementById('bulkyToggle');
+const photoZone         = document.getElementById('photoZone');
+const photoHint         = document.getElementById('photoHint');
+const photoPreview      = document.getElementById('photoPreview');
+const photoRemoveBtn    = document.getElementById('photoRemoveBtn');
+const photoInput        = document.getElementById('photoInput');
+const locBtn            = document.getElementById('locBtn');
+const locBtnText        = document.getElementById('locBtnText');
+const locStatus         = document.getElementById('locStatus');
+const miniMapEl         = document.getElementById('miniMap');
+const locHint           = document.getElementById('locHint');
+const townInput         = document.getElementById('townInput');
+const memoInput         = document.getElementById('memoInput');
+const memoCount         = document.getElementById('memoCount');
+const submitBtn         = document.getElementById('submitBtn');
+const doneOverlay       = document.getElementById('doneOverlay');
+const doneHomeBtn       = document.getElementById('doneHomeBtn');
+const doneAgainBtn      = document.getElementById('doneAgainBtn');
+
+let currentUser = null;
+let currentUserDisplayName = '名無しの発見者';
+let selectedCategory = null;
+let photoDataUrl = null;
+let capturedLatLng = null; // { lat, lng }
+let miniMap = null;
+let miniMarker = null;
+
+backBtn.addEventListener('click', () => {
+  if(document.referrer && document.referrer.includes(location.origin) && window.history.length > 1){
+    window.history.back();
+  } else {
+    window.location.href = 'home.html';
+  }
+});
+
+/* ---------------------------------------------------------------------
+   カテゴリ選択
+   --------------------------------------------------------------------- */
+catGrid.addEventListener('click', (e) => {
+  const btn = e.target.closest('.cat-btn');
+  if(!btn) return;
+  catGrid.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  selectedCategory = btn.dataset.cat;
+  // 「大型ゴミ」カテゴリを選んだら回収トグルも自動でONにする（変更は可能）
+  if(selectedCategory === '大型ゴミ'){
+    bulkyToggle.checked = true;
+  }
+});
+
+/* ---------------------------------------------------------------------
+   写真（撮影・選択 → リサイズしてbase64化）
+   Firebase Storageは使わず、他ページと同じくFirestoreに直接保存する。
+   --------------------------------------------------------------------- */
+function resizeImageToDataURL(file, maxSize = 720, quality = 0.75){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('ファイルの読み込みに失敗しました'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('画像として読み込めませんでした'));
+      img.onload = () => {
+        let w = img.width, h = img.height;
+        if(w > h && w > maxSize){ h = Math.round(h * maxSize / w); w = maxSize; }
+        else if(h > maxSize){ w = Math.round(w * maxSize / h); h = maxSize; }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+photoZone.addEventListener('click', () => photoInput.click());
+photoRemoveBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  photoDataUrl = null;
+  photoInput.value = '';
+  photoPreview.style.display = 'none';
+  photoHint.style.display = 'flex';
+  photoRemoveBtn.style.display = 'none';
+});
+
+photoInput.addEventListener('change', async () => {
+  const file = photoInput.files && photoInput.files[0];
+  if(!file) return;
+  if(!file.type.startsWith('image/')){
+    alert('画像ファイルを選んでください。');
+    return;
+  }
+  try{
+    photoDataUrl = await resizeImageToDataURL(file);
+    photoPreview.src = photoDataUrl;
+    photoPreview.style.display = 'block';
+    photoHint.style.display = 'none';
+    photoRemoveBtn.style.display = 'flex';
+  }catch(err){
+    console.error('写真の処理に失敗しました', err);
+    alert('写真を読み込めませんでした。別の画像でお試しください。');
+  }
+});
+
+/* ---------------------------------------------------------------------
+   位置情報。取得後はミニマップにピンを表示し、ドラッグで微調整できる。
+   --------------------------------------------------------------------- */
+function ensureMiniMap(lat, lng){
+  miniMapEl.style.display = 'block';
+  locHint.style.display = 'block';
+  if(!miniMap){
+    miniMap = L.map('miniMap', { zoomControl:false, attributionControl:false }).setView([lat, lng], 16);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:19 }).addTo(miniMap);
+    miniMarker = L.marker([lat, lng], { draggable:true }).addTo(miniMap);
+    miniMarker.on('dragend', () => {
+      const p = miniMarker.getLatLng();
+      capturedLatLng = { lat: p.lat, lng: p.lng };
+    });
+    miniMap.on('click', (e) => {
+      miniMarker.setLatLng(e.latlng);
+      capturedLatLng = { lat: e.latlng.lat, lng: e.latlng.lng };
+    });
+    setTimeout(() => miniMap.invalidateSize(), 200);
+  } else {
+    miniMap.setView([lat, lng], 16);
+    miniMarker.setLatLng([lat, lng]);
+    setTimeout(() => miniMap.invalidateSize(), 50);
+  }
+}
+
+let geoToken = 0;
+locBtn.addEventListener('click', () => {
+  if(!navigator.geolocation){
+    locStatus.textContent = 'この端末は位置情報に対応していません';
+    return;
+  }
+  const myToken = ++geoToken;
+  locBtn.disabled = true;
+  locBtnText.textContent = '取得中…';
+  locStatus.textContent = '';
+
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      if(myToken !== geoToken) return;
+      locBtn.disabled = false;
+      const { latitude, longitude } = pos.coords;
+      capturedLatLng = { lat: latitude, lng: longitude };
+      locBtn.classList.add('got');
+      locBtnText.textContent = '現在地を再取得する';
+      locStatus.textContent = '位置情報を取得しました';
+      locStatus.classList.add('ok');
+      ensureMiniMap(latitude, longitude);
+    },
+    (err) => {
+      if(myToken !== geoToken) return;
+      locBtn.disabled = false;
+      locBtnText.textContent = '現在地を取得する';
+      console.error(err);
+      if(err.code === 1){
+        locStatus.textContent = '位置情報の利用が許可されていません。端末の設定を確認してください。';
+      } else {
+        locStatus.textContent = '位置情報を取得できませんでした。もう一度お試しください。';
+      }
+      locStatus.classList.remove('ok');
+    },
+    { enableHighAccuracy:true, timeout:8000, maximumAge:15000 }
+  );
+});
+
+/* ---------------------------------------------------------------------
+   文字数カウント
+   --------------------------------------------------------------------- */
+memoInput.addEventListener('input', () => {
+  memoCount.textContent = memoInput.value.length;
+});
+
+/* ---------------------------------------------------------------------
+   送信
+   --------------------------------------------------------------------- */
+function setSubmitBusy(isBusy){
+  submitBtn.disabled = isBusy;
+  submitBtn.innerHTML = isBusy
+    ? '<span class="spinner"></span> 記録しています…'
+    : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg> この発見を記録する';
+}
+
+function resetForm(){
+  selectedCategory = null;
+  photoDataUrl = null;
+  catGrid.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
+  bulkyToggle.checked = false;
+  photoInput.value = '';
+  photoPreview.style.display = 'none';
+  photoHint.style.display = 'flex';
+  photoRemoveBtn.style.display = 'none';
+  townInput.value = '';
+  memoInput.value = '';
+  memoCount.textContent = '0';
+  // 位置情報はそのまま残す（同じ場所で連続投稿することが多いため）
+}
+
+submitBtn.addEventListener('click', async () => {
+  if(!currentUser) return;
+
+  if(!selectedCategory){
+    alert('ゴミの種類を選んでください。');
+    return;
+  }
+  if(!capturedLatLng){
+    alert('位置情報を取得してください。');
+    return;
+  }
+
+  setSubmitBusy(true);
+  try{
+    const reportData = {
+      uid: currentUser.uid,
+      displayName: currentUserDisplayName,
+      category: selectedCategory,
+      isBulky: !!bulkyToggle.checked,
+      lat: capturedLatLng.lat,
+      lng: capturedLatLng.lng,
+      memo: memoInput.value.trim(),
+      town: townInput.value.trim() || null,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+
+    const reportRef = await db.collection('reports').add(reportData);
+
+    if(photoDataUrl){
+      await db.collection('reportPhotos').doc(reportRef.id).set({
+        imageBase64: photoDataUrl,
+        uid: currentUser.uid,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    }
+
+    await db.collection('users').doc(currentUser.uid).set({
+      totalFinds: firebase.firestore.FieldValue.increment(1),
+      totalCollected: firebase.firestore.FieldValue.increment(bulkyToggle.checked ? 1 : 0)
+    }, { merge: true });
+
+    doneOverlay.classList.add('show');
+  }catch(err){
+    console.error('発見の記録に失敗しました', err);
+    alert('記録に失敗しました。通信状況を確認してもう一度お試しください。');
+  }finally{
+    setSubmitBusy(false);
+  }
+});
+
+doneHomeBtn.addEventListener('click', () => {
+  window.location.href = 'home.html';
+});
+doneAgainBtn.addEventListener('click', () => {
+  doneOverlay.classList.remove('show');
+  resetForm();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+});
+
+/* ---------------------------------------------------------------------
+   認証チェック。ユーザーの表示名をFirestoreから取得しておく
+   （reportsのdisplayNameに使う。まちみっけ系ページと同じパターン）。
+   --------------------------------------------------------------------- */
+let resolved = false;
+auth.onAuthStateChanged(async (user) => {
+  if(resolved) return;
+  resolved = true;
+
+  if(!user){
+    window.location.href = LOGIN_PAGE;
+    return;
+  }
+
+  currentUser = user;
+  try{
+    const snap = await db.collection('users').doc(user.uid).get();
+    if(snap.exists && snap.data().displayName){
+      currentUserDisplayName = snap.data().displayName;
+    } else if(user.isAnonymous){
+      currentUserDisplayName = 'ゲスト冒険者';
+    }
+  }catch(e){
+    console.warn('ユーザー情報の取得に失敗しました', e);
+  }
+
+  overlay.style.opacity = '0';
+  setTimeout(() => overlay.style.display = 'none', 350);
+});
+</script>
+</body>
+</html>

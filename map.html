@@ -32,7 +32,15 @@
     padding:calc(env(safe-area-inset-top,0px) + 16px) 18px 14px;
     color:#fff; position:relative; z-index:5;
   }
-  header h1{font-family:"Kiwi Maru", serif; font-weight:500; font-size:18px; margin:0 0 10px;}
+  .header-top{display:flex; align-items:center; gap:10px; margin-bottom:10px;}
+  .back-btn{
+    width:32px; height:32px; border-radius:50%; flex-shrink:0;
+    background:rgba(255,255,255,0.16); border:1px solid rgba(255,255,255,0.28);
+    display:flex; align-items:center; justify-content:center;
+    color:#fff; cursor:pointer;
+  }
+  .back-btn svg{width:16px; height:16px;}
+  header h1{font-family:"Kiwi Maru", serif; font-weight:500; font-size:18px; margin:0;}
 
   .chips{display:flex; gap:8px; overflow-x:auto; padding-bottom:2px; scrollbar-width:none;}
   .chips::-webkit-scrollbar{display:none;}
@@ -114,7 +122,12 @@
 
 <div class="stage">
   <header>
-    <h1>クリーンマップ</h1>
+    <div class="header-top">
+      <button class="back-btn" id="backBtn" title="戻る">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+      <h1>クリーンマップ</h1>
+    </div>
     <div class="chips" id="categoryChips">
       <div class="chip active" data-cat="all">すべて</div>
       <div class="chip" data-cat="ペットボトル">💧 ペットボトル</div>
@@ -193,6 +206,17 @@ const toastEl   = document.getElementById('toast');
 const heatToggle= document.getElementById('heatToggle');
 const locateBtn = document.getElementById('locateBtn');
 const legendEl  = document.getElementById('heatLegend');
+const backBtn   = document.getElementById('backBtn');
+
+backBtn.addEventListener('click', () => {
+  // 直前のページ（同じサイト内）に戻れるならブラウザ履歴で戻り、
+  // 無ければ（外部リンクやリロード直後などで履歴が無い場合）ホームへ
+  if(document.referrer && document.referrer.includes(location.origin) && window.history.length > 1){
+    window.history.back();
+  } else {
+    window.location.href = 'home.html';
+  }
+});
 
 function showToast(msg){
   toastEl.textContent = msg;

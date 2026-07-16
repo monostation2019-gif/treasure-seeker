@@ -299,11 +299,14 @@ function setBusy(isBusy, activeBtn){
 function showError(err){
   console.error(err);
   const code = err && err.code ? err.code : '';
+  const msg  = err && err.message ? err.message : String(err);
   if(code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request'){
     statusMsg.textContent = '';
     return;
   }
-  statusMsg.textContent = 'ログインできませんでした。もう一度お試しください。';
+  /* 一時的にエラー詳細を画面に出す（原因特定用。原因が分かったら元の
+     'ログインできませんでした。もう一度お試しください。' に戻してOK） */
+  statusMsg.innerHTML = 'ログインできませんでした。<br><span style="font-size:10.5px; opacity:.8; word-break:break-all;">[' + code + '] ' + msg + '</span>';
 }
 
 /* ---------------------------------------------------------------------
@@ -332,14 +335,21 @@ async function ensureUserDoc(user, providerLabel){
       lastLogin: firebase.firestore.FieldValue.serverTimestamp()
     });
   } else {
-    await ref.set({
-      lastLogin: firebase.firestore.FieldValue.serverTimestamp(),
-      // ゲスト以外はログインの度に最新のプロフィール情報へ更新
-      ...(providerLabel !== 'guest' ? {
-        displayName: user.displayName || snap.data().displayName,
-        photoURL: user.photoURL || snap.data().photoURL
-      } : {})
-    }, { merge: true });
+    const existing = snap.data() || {};
+    const update = { lastLogin: firebase.firestore.FieldValue.serverTimestamp() };
+
+    /* displayName / photoURL は、ユーザーがマイページで一度でも
+       カスタマイズしていたら、ログインの度にプロバイダー側の値で
+       上書きしない（＝再ログインでニックネームや画像が消える不具合の原因）。
+       Firestore側に値が無いときだけ、プロバイダーの情報で初期補完する。 */
+    if(!existing.displayName && user.displayName){
+      update.displayName = user.displayName;
+    }
+    if(!existing.photoURL && user.photoURL){
+      update.photoURL = user.photoURL;
+    }
+
+    await ref.set(update, { merge: true });
   }
 }
 

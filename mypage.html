@@ -38,14 +38,24 @@
     margin-top:-34px; box-shadow:0 12px 28px rgba(44,78,58,0.14);
     text-align:center; position:relative; z-index:2;
   }
+  .avatar-wrap{ position:relative; width:72px; margin:0 auto 10px; }
   .avatar{
     width:72px; height:72px; border-radius:50%;
     background:var(--forest-soft); color:var(--forest-deep);
     display:flex; align-items:center; justify-content:center;
-    font-size:28px; font-weight:900; margin:0 auto 10px;
+    font-size:28px; font-weight:900; margin:0;
     border:3px solid #fff; box-shadow:0 4px 12px rgba(44,78,58,0.18);
     object-fit:cover;
   }
+  .avatar-edit-btn{
+    position:absolute; right:-4px; bottom:-2px;
+    width:26px; height:26px; border-radius:50%;
+    background:var(--forest); color:#fff; border:2px solid #fff;
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:0 3px 8px rgba(44,78,58,0.3); cursor:pointer; padding:0;
+  }
+  .avatar-edit-btn svg{ width:13px; height:13px; }
+  .avatar-edit-btn.busy{ opacity:.6; pointer-events:none; }
   .name-row{display:flex; align-items:center; justify-content:center; gap:6px;}
   .name-row h2{font-family:"Kiwi Maru", serif; font-weight:500; font-size:17px; margin:0;}
   .edit-name{background:none; border:none; color:var(--ink-soft); cursor:pointer; padding:2px;}
@@ -131,8 +141,14 @@
 
   <main>
     <div class="profile-card">
-      <img class="avatar" id="avatarImg" style="display:none;" alt="">
-      <div class="avatar" id="avatarFallback">?</div>
+      <div class="avatar-wrap">
+        <img class="avatar" id="avatarImg" style="display:none;" alt="">
+        <div class="avatar" id="avatarFallback">?</div>
+        <button class="avatar-edit-btn" id="avatarEditBtn" title="プロフィール画像を変更">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        </button>
+        <input type="file" id="avatarInput" accept="image/*" style="display:none;">
+      </div>
 
       <div class="name-row">
         <h2 id="displayName">読み込み中…</h2>
@@ -226,6 +242,8 @@ const statCO2El       = document.getElementById('statCO2');
 const badgeRowEl      = document.getElementById('badgeRow');
 const editNameBtn     = document.getElementById('editNameBtn');
 const logoutRow       = document.getElementById('logoutRow');
+const avatarEditBtn   = document.getElementById('avatarEditBtn');
+const avatarInput     = document.getElementById('avatarInput');
 
 /* バッジのマスターデータ。user.badges (id配列) に含まれていれば獲得済み表示にする。
    実際のバッジ体系が決まったら内容を差し替えてください。 */
@@ -295,6 +313,84 @@ editNameBtn.addEventListener('click', async () => {
   }catch(err){
     console.error('ニックネームの更新に失敗しました', err);
     alert('更新に失敗しました。もう一度お試しください。');
+  }
+});
+
+/* ---------------------------------------------------------------------
+   プロフィール画像の変更
+   Firebase Storageは使わず、まちみっけ等と同じ「リサイズしてbase64化 →
+   Firestoreのフィールドに直接保存」方式。240px程度の正方形に縮小した上で
+   JPEG圧縮するので、Firestoreの1ドキュメント1MB制限にも収まるサイズになる。
+   --------------------------------------------------------------------- */
+function resizeImageToDataURL(file, maxSize = 240, quality = 0.82){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('ファイルの読み込みに失敗しました'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('画像として読み込めませんでした'));
+      img.onload = () => {
+        // 中央を正方形にクロップしてからmaxSizeへ縮小する
+        const srcSize = Math.min(img.width, img.height);
+        const sx = (img.width - srcSize) / 2;
+        const sy = (img.height - srcSize) / 2;
+
+        const canvas = document.createElement('canvas');
+        canvas.width = maxSize;
+        canvas.height = maxSize;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, sx, sy, srcSize, srcSize, 0, 0, maxSize, maxSize);
+
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+avatarEditBtn.addEventListener('click', () => {
+  avatarInput.click();
+});
+
+avatarInput.addEventListener('change', async () => {
+  const file = avatarInput.files && avatarInput.files[0];
+  avatarInput.value = ''; // 同じファイルを連続選択しても change が発火するように
+  if(!file) return;
+
+  if(!file.type.startsWith('image/')){
+    alert('画像ファイルを選んでください。');
+    return;
+  }
+  // 元ファイルが極端に大きい場合のみ入口で軽く制限（リサイズ自体はこの後行う）
+  if(file.size > 15 * 1024 * 1024){
+    alert('画像サイズが大きすぎます。15MB以下の画像を選んでください。');
+    return;
+  }
+
+  const user = auth.currentUser;
+  if(!user) return;
+
+  avatarEditBtn.classList.add('busy');
+  try{
+    const dataUrl = await resizeImageToDataURL(file);
+
+    // Firestore 1ドキュメント上限(1MB)に対する安全マージン確認
+    if(dataUrl.length > 900 * 1024){
+      alert('画像の変換後サイズが大きすぎます。別の画像でお試しください。');
+      return;
+    }
+
+    await db.collection('users').doc(user.uid).set({ photoURL: dataUrl }, { merge:true });
+
+    avatarImg.src = dataUrl;
+    avatarImg.style.display = 'block';
+    avatarFallback.style.display = 'none';
+  }catch(err){
+    console.error('プロフィール画像の更新に失敗しました', err);
+    alert('画像の更新に失敗しました。もう一度お試しください。');
+  }finally{
+    avatarEditBtn.classList.remove('busy');
   }
 });
 
