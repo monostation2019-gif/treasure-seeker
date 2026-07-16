@@ -72,6 +72,10 @@
     position:absolute; right:12px; bottom:96px; z-index:4;
     display:flex; flex-direction:column; gap:10px;
   }
+  .fab-col-top{
+    position:absolute; right:12px; top:12px; z-index:4;
+    display:flex; flex-direction:column; gap:8px;
+  }
   .fab{
     width:44px; height:44px; border-radius:50%;
     background:#fff; box-shadow:0 8px 18px rgba(44,78,58,0.22);
@@ -80,6 +84,14 @@
   }
   .fab.on{background:var(--forest); color:#fff;}
   .fab svg{width:19px; height:19px;}
+  .fab-sm{
+    width:34px; height:34px; border-radius:50%;
+    background:#fff; box-shadow:0 6px 14px rgba(44,78,58,0.22);
+    display:flex; align-items:center; justify-content:center;
+    border:none; cursor:pointer; color:var(--forest-deep);
+  }
+  .fab-sm.on{background:var(--forest); color:#fff;}
+  .fab-sm svg{width:15px; height:15px;}
 
   .popup-card{font-family:"Noto Sans JP", sans-serif; min-width:160px;}
   .popup-card .cat{display:inline-block; font-size:11px; font-weight:700; color:var(--forest-deep); background:var(--forest-soft); padding:2px 8px; border-radius:999px; margin-bottom:6px;}
@@ -155,11 +167,11 @@
       <div class="legend-sub">直径10m範囲あたりの件数</div>
     </div>
 
-    <div class="fab-col">
-      <button class="fab" id="layerToggle" title="衛星写真に切替">
+    <div class="fab-col-top">
+      <button class="fab-sm" id="layerToggle" title="衛星写真に切替">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
       </button>
-      <button class="fab" id="locateBtn" title="現在地へ移動">
+      <button class="fab-sm" id="locateBtn" title="現在地へ移動">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
       </button>
     </div>

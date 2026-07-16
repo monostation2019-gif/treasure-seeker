@@ -162,6 +162,7 @@
 
   #editMiniMap{width:100%; height:140px; border-radius:14px;}
   .edit-loc-hint{font-size:10.5px; color:var(--ink-soft); margin-top:6px; text-align:center;}
+  .edit-loc-hint.ok{color:var(--forest-deep); font-weight:700;}
 
   textarea.edit-textarea, input.edit-input{
     width:100%; border:1.5px solid var(--line); border-radius:12px;
@@ -305,6 +306,7 @@
       <div class="edit-card">
         <div class="edit-card-label">エリア（町名など）</div>
         <input class="edit-input" type="text" id="editTownInput" maxlength="20">
+        <div class="edit-loc-hint" id="editTownStatus"></div>
       </div>
 
       <div class="edit-card">
@@ -365,6 +367,7 @@ const editPhotoPreview    = document.getElementById('editPhotoPreview');
 const editPhotoRemoveBtn  = document.getElementById('editPhotoRemoveBtn');
 const editPhotoInput      = document.getElementById('editPhotoInput');
 const editTownInput       = document.getElementById('editTownInput');
+const editTownStatus      = document.getElementById('editTownStatus');
 const editMemoInput       = document.getElementById('editMemoInput');
 const editMemoCount       = document.getElementById('editMemoCount');
 
@@ -388,6 +391,7 @@ let editCategory = null;
 let editLat = null, editLng = null;
 let editPhotoDataUrl = undefined; // undefined=未変更 / null=削除 / 文字列=新しい画像
 let editMiniMap = null, editMiniMarker = null;
+let editTownGeocodeToken = 0;
 
 function escapeHtml(str){
   return String(str).replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
@@ -568,6 +572,84 @@ async function performDelete(id){
 /* ---------------------------------------------------------------------
    編集モーダル
    --------------------------------------------------------------------- */
+/* ---------------------------------------------------------------------
+   位置情報 → エリア名の自動取得（国土地理院 逆ジオコーディングAPI）
+   discover.html（発見する ページ）と同じロジック。ピンを動かした場合は
+   ランキング集計とのズレを防ぐため、必ずここで町名を再取得して上書きする。
+   （手入力のみで町名を変えたい場合は、ピンを動かさなければ上書きされない）
+   --------------------------------------------------------------------- */
+const EDIT_MIE_MUNI_MAP = {
+  '24201': '津市',
+  '24202': '四日市市',
+  '24203': '伊勢市',
+  '24204': '松阪市',
+  '24205': '桑名市',
+  '24207': '鈴鹿市',
+  '24208': '名張市',
+  '24209': '尾鷲市',
+  '24210': '亀山市',
+  '24211': '鳥羽市',
+  '24212': '熊野市',
+  '24214': 'いなべ市',
+  '24215': '志摩市',
+  '24216': '伊賀市',
+  '24303': '木曽岬町',
+  '24341': '菰野町',
+  '24343': '朝日町',
+  '24344': '川越町',
+  '24441': '多気町',
+  '24442': '明和町',
+  '24443': '大台町',
+  '24461': '玉城町',
+  '24470': '度会町',
+  '24471': '大紀町',
+  '24472': '南伊勢町',
+  '24543': '紀北町',
+  '24561': '御浜町',
+  '24562': '紀宝町'
+};
+
+async function fillEditTownFromLatLng(lat, lng){
+  const myToken = ++editTownGeocodeToken;
+  if(editTownStatus){
+    editTownStatus.textContent = 'エリアを自動取得中…';
+    editTownStatus.classList.remove('ok');
+  }
+
+  try{
+    const url = `https://mreversegeocoder.gsi.go.jp/reverse-geocoder/LonLatToAddress?lat=${lat}&lon=${lng}`;
+    const res = await fetch(url);
+    if(myToken !== editTownGeocodeToken) return; // 古い応答は破棄
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+
+    const data = await res.json();
+    const results = data && data.results;
+    const cityName = results && EDIT_MIE_MUNI_MAP[results.muniCd];
+
+    if(cityName){
+      const full = cityName + (results.lv01Nm || '');
+      editTownInput.value = full;
+      if(editTownStatus){
+        editTownStatus.textContent = '位置情報から自動取得しました（違う場合は修正してください）';
+        editTownStatus.classList.add('ok');
+      }
+    } else {
+      // 三重県内の既知市町として認識できなかった場合は、絶対に推測で埋めない
+      if(editTownStatus){
+        editTownStatus.textContent = '自動取得できませんでした。お手数ですが手入力をお願いします';
+        editTownStatus.classList.remove('ok');
+      }
+    }
+  }catch(err){
+    if(myToken !== editTownGeocodeToken) return;
+    console.warn('エリアの自動取得に失敗しました', err);
+    if(editTownStatus){
+      editTownStatus.textContent = '自動取得できませんでした。お手数ですが手入力をお願いします';
+      editTownStatus.classList.remove('ok');
+    }
+  }
+}
+
 function ensureEditMiniMap(lat, lng){
   if(typeof lat !== 'number' || typeof lng !== 'number') return;
   if(!editMiniMap){
@@ -577,10 +659,12 @@ function ensureEditMiniMap(lat, lng){
     editMiniMarker.on('dragend', () => {
       const p = editMiniMarker.getLatLng();
       editLat = p.lat; editLng = p.lng;
+      fillEditTownFromLatLng(p.lat, p.lng);
     });
     editMiniMap.on('click', (e) => {
       editMiniMarker.setLatLng(e.latlng);
       editLat = e.latlng.lat; editLng = e.latlng.lng;
+      fillEditTownFromLatLng(e.latlng.lat, e.latlng.lng);
     });
   } else {
     editMiniMap.setView([lat, lng], 16);
@@ -593,6 +677,7 @@ function openEditModal(id){
   const r = myReports.find(x => x.id === id);
   if(!r) return;
 
+  editTownGeocodeToken++; // 前回開いていた編集の自動取得応答を無効化
   editingId = id;
   editCategory = r.category || null;
   editLat = typeof r.lat === 'number' ? r.lat : null;
@@ -602,6 +687,10 @@ function openEditModal(id){
   editCatGrid.querySelectorAll('.cat-btn').forEach(b => b.classList.toggle('active', b.dataset.cat === editCategory));
   editBulkyToggle.checked = !!r.isBulky;
   editTownInput.value = r.town || '';
+  if(editTownStatus){
+    editTownStatus.textContent = '';
+    editTownStatus.classList.remove('ok');
+  }
   editMemoInput.value = r.memo || '';
   editMemoCount.textContent = (r.memo || '').length;
 
