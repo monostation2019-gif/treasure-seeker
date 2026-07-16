@@ -664,6 +664,14 @@ submitBtn.addEventListener('click', async () => {
   }
 
   setSubmitBusy(true);
+
+  /* ---------------------------------------------------------------
+     ①発見データ本体の記録。これが成功すればマップ・ランキングには
+     即座に反映される（両ページとも reports コレクションを直接集計
+     しているため）。ここが失敗した場合のみ「記録に失敗しました」
+     として扱い、送信全体を中断する。
+     --------------------------------------------------------------- */
+  let reportRef;
   try{
     const reportData = {
       uid: currentUser.uid,
@@ -676,29 +684,43 @@ submitBtn.addEventListener('click', async () => {
       town: townInput.value.trim() || null,
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     };
+    reportRef = await db.collection('reports').add(reportData);
+  }catch(err){
+    console.error('発見の記録に失敗しました', err);
+    alert('記録に失敗しました。通信状況を確認してもう一度お試しください。');
+    setSubmitBusy(false);
+    return;
+  }
 
-    const reportRef = await db.collection('reports').add(reportData);
-
-    if(photoDataUrl){
+  /* ---------------------------------------------------------------
+     ②写真・③統計更新（totalFinds等）は付随処理。
+     ①が既に成功しているので、ここで失敗してもユーザーには
+     成功として案内する（コンソールに警告だけ残す）。
+     失敗を握りつぶすのではなく、後から気づけるようログに残す。
+     --------------------------------------------------------------- */
+  if(photoDataUrl){
+    try{
       await db.collection('reportPhotos').doc(reportRef.id).set({
         imageBase64: photoDataUrl,
         uid: currentUser.uid,
         createdAt: firebase.firestore.FieldValue.serverTimestamp()
       });
+    }catch(err){
+      console.warn('写真の保存に失敗しました（発見データ自体は記録済み）', err);
     }
+  }
 
+  try{
     await db.collection('users').doc(currentUser.uid).set({
       totalFinds: firebase.firestore.FieldValue.increment(1),
       totalCollected: firebase.firestore.FieldValue.increment(bulkyToggle.checked ? 1 : 0)
     }, { merge: true });
-
-    doneOverlay.classList.add('show');
   }catch(err){
-    console.error('発見の記録に失敗しました', err);
-    alert('記録に失敗しました。通信状況を確認してもう一度お試しください。');
-  }finally{
-    setSubmitBusy(false);
+    console.warn('統計情報の更新に失敗しました（発見データ自体は記録済み）', err);
   }
+
+  doneOverlay.classList.add('show');
+  setSubmitBusy(false);
 });
 
 doneHomeBtn.addEventListener('click', () => {
