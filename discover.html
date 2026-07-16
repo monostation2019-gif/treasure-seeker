@@ -133,6 +133,7 @@
     display:flex; align-items:center; justify-content:center; gap:8px; cursor:pointer;
   }
   .submit-btn:disabled{opacity:0.5; cursor:not-allowed;}
+  .submit-btn svg{width:18px; height:18px; flex-shrink:0;}
   .spinner{width:16px; height:16px; border:2px solid rgba(255,255,255,0.4); border-top-color:#fff; border-radius:50%; animation:spin .7s linear infinite;}
   @keyframes spin{to{transform:rotate(360deg);}}
 
@@ -265,9 +266,10 @@
       <div class="card">
         <div class="card-label">
           <span>エリア（町名など）</span>
-          <span class="optional-tag">任意</span>
+          <span class="optional-tag">位置情報から自動取得・修正可</span>
         </div>
-        <input type="text" id="townInput" placeholder="例）伊勢市宇治館町" maxlength="20">
+        <input type="text" id="townInput" placeholder="位置情報を取得すると自動で入ります" maxlength="20">
+        <div class="loc-status" id="townStatus"></div>
       </div>
 
       <div class="card">
@@ -360,6 +362,7 @@ const locStatus         = document.getElementById('locStatus');
 const miniMapEl         = document.getElementById('miniMap');
 const locHint           = document.getElementById('locHint');
 const townInput         = document.getElementById('townInput');
+const townStatus        = document.getElementById('townStatus');
 const memoInput         = document.getElementById('memoInput');
 const memoCount         = document.getElementById('memoCount');
 const submitBtn         = document.getElementById('submitBtn');
@@ -374,6 +377,9 @@ let photoDataUrl = null;
 let capturedLatLng = null; // { lat, lng }
 let miniMap = null;
 let miniMarker = null;
+let townAutoValue = '';    // 自動入力した最後の値（ユーザーの手入力と区別するため）
+let townEditedByUser = false;
+let townGeocodeToken = 0;
 
 backBtn.addEventListener('click', () => {
   if(document.referrer && document.referrer.includes(location.origin) && window.history.length > 1){
@@ -454,6 +460,85 @@ photoInput.addEventListener('change', async () => {
 });
 
 /* ---------------------------------------------------------------------
+   位置情報 → エリア名の自動取得（国土地理院 逆ジオコーディングAPI）
+   https://mreversegeocoder.gsi.go.jp/reverse-geocoder/LonLatToAddress
+
+   このAPIは「町字の境界データ」に基づいており、GoogleMap系のように
+   最寄り地点を推測で返す方式ではないため誤爆しにくい。
+   さらに安全側に倒すため、市区町村コード(muniCd)が三重県内の
+   既知の市町（下記MIE_MUNI_MAP）に含まれる場合だけ自動入力する。
+   知らないコードが返ってきた場合は「自動取得できませんでした」と表示し、
+   絶対に適当な地名を入れない（＝前回の「全く違う町名」事故の再発防止）。
+   --------------------------------------------------------------------- */
+const MIE_MUNI_MAP = {
+  '24201': '津市',
+  '24202': '四日市市',
+  '24203': '伊勢市',
+  '24204': '松阪市',
+  '24205': '桑名市',
+  '24207': '鈴鹿市',
+  '24208': '名張市',
+  '24209': '尾鷲市',
+  '24210': '亀山市',
+  '24211': '鳥羽市',
+  '24212': '熊野市',
+  '24214': 'いなべ市',
+  '24215': '志摩市',
+  '24216': '伊賀市',
+  '24303': '木曽岬町',
+  '24341': '菰野町',
+  '24343': '朝日町',
+  '24344': '川越町',
+  '24441': '多気町',
+  '24442': '明和町',
+  '24443': '大台町',
+  '24461': '玉城町',
+  '24470': '度会町',
+  '24471': '大紀町',
+  '24472': '南伊勢町',
+  '24543': '紀北町',
+  '24561': '御浜町',
+  '24562': '紀宝町'
+};
+
+async function fillTownFromLatLng(lat, lng){
+  if(townEditedByUser) return; // 既に手で修正済みなら何もしない
+
+  const myToken = ++townGeocodeToken;
+  townStatus.textContent = 'エリアを自動取得中…';
+  townStatus.classList.remove('ok');
+
+  try{
+    const url = `https://mreversegeocoder.gsi.go.jp/reverse-geocoder/LonLatToAddress?lat=${lat}&lon=${lng}`;
+    const res = await fetch(url);
+    if(myToken !== townGeocodeToken) return; // 古い応答は破棄
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+
+    const data = await res.json();
+    const results = data && data.results;
+    const cityName = results && MIE_MUNI_MAP[results.muniCd];
+
+    if(cityName){
+      // 既知の市町だけ自動入力する（丁目・町名まで含めて表示）
+      const full = cityName + (results.lv01Nm || '');
+      townAutoValue = full;
+      townInput.value = full;
+      townStatus.textContent = '位置情報から自動取得しました（違う場合は修正してください）';
+      townStatus.classList.add('ok');
+    } else {
+      // 三重県内の既知市町として認識できなかった場合は、絶対に推測で埋めない
+      townStatus.textContent = '自動取得できませんでした。お手数ですが手入力をお願いします';
+      townStatus.classList.remove('ok');
+    }
+  }catch(err){
+    if(myToken !== townGeocodeToken) return;
+    console.warn('エリアの自動取得に失敗しました', err);
+    townStatus.textContent = '自動取得できませんでした。お手数ですが手入力をお願いします';
+    townStatus.classList.remove('ok');
+  }
+}
+
+/* ---------------------------------------------------------------------
    位置情報。取得後はミニマップにピンを表示し、ドラッグで微調整できる。
    --------------------------------------------------------------------- */
 function ensureMiniMap(lat, lng){
@@ -466,10 +551,12 @@ function ensureMiniMap(lat, lng){
     miniMarker.on('dragend', () => {
       const p = miniMarker.getLatLng();
       capturedLatLng = { lat: p.lat, lng: p.lng };
+      fillTownFromLatLng(p.lat, p.lng);
     });
     miniMap.on('click', (e) => {
       miniMarker.setLatLng(e.latlng);
       capturedLatLng = { lat: e.latlng.lat, lng: e.latlng.lng };
+      fillTownFromLatLng(e.latlng.lat, e.latlng.lng);
     });
     setTimeout(() => miniMap.invalidateSize(), 200);
   } else {
@@ -501,6 +588,7 @@ locBtn.addEventListener('click', () => {
       locStatus.textContent = '位置情報を取得しました';
       locStatus.classList.add('ok');
       ensureMiniMap(latitude, longitude);
+      fillTownFromLatLng(latitude, longitude);
     },
     (err) => {
       if(myToken !== geoToken) return;
@@ -525,6 +613,11 @@ memoInput.addEventListener('input', () => {
   memoCount.textContent = memoInput.value.length;
 });
 
+townInput.addEventListener('input', () => {
+  // 自動入力した値と違う＝ユーザーが手で書き換えた、とみなして以後は自動上書きしない
+  townEditedByUser = true;
+});
+
 /* ---------------------------------------------------------------------
    送信
    --------------------------------------------------------------------- */
@@ -545,9 +638,17 @@ function resetForm(){
   photoHint.style.display = 'flex';
   photoRemoveBtn.style.display = 'none';
   townInput.value = '';
+  townStatus.textContent = '';
+  townStatus.classList.remove('ok');
+  townAutoValue = '';
+  townEditedByUser = false;
   memoInput.value = '';
   memoCount.textContent = '0';
-  // 位置情報はそのまま残す（同じ場所で連続投稿することが多いため）
+  // 位置情報はそのまま残す（同じ場所で連続投稿することが多いため）。
+  // 位置情報が残っている場合は、エリアも改めて自動取得し直す。
+  if(capturedLatLng){
+    fillTownFromLatLng(capturedLatLng.lat, capturedLatLng.lng);
+  }
 }
 
 submitBtn.addEventListener('click', async () => {
