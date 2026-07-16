@@ -114,7 +114,8 @@
     </a>
 
     <div class="period-toggle">
-      <button class="active" data-period="today">今日</button>
+      <button class="active" data-period="week">週間</button>
+      <button data-period="month">月間</button>
       <button data-period="all">累計</button>
     </div>
 
@@ -169,13 +170,24 @@ const scopeTabs = document.getElementById('scopeTabs');
 const periodToggle = document.querySelector('.period-toggle');
 
 let currentScope = 'town';   // town / neighborhoodAssoc / school / company の Firestore フィールド名
-let currentPeriod = 'today'; // today / all
+let currentPeriod = 'week'; // week / month / all
 
 function escapeHtml(str){
   return String(str).replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
 }
-function startOfToday(){
-  const d = new Date(); d.setHours(0,0,0,0);
+function startOfWeek(){
+  // 月曜始まりで今週の開始時刻を計算
+  const d = new Date();
+  const day = d.getDay(); // 0=日,1=月,...6=土
+  const diffToMonday = (day === 0) ? -6 : (1 - day);
+  d.setDate(d.getDate() + diffToMonday);
+  d.setHours(0,0,0,0);
+  return firebase.firestore.Timestamp.fromDate(d);
+}
+function startOfMonth(){
+  const d = new Date();
+  d.setDate(1);
+  d.setHours(0,0,0,0);
   return firebase.firestore.Timestamp.fromDate(d);
 }
 
@@ -194,9 +206,12 @@ async function loadRanking(){
 
   try{
     let query = db.collection('reports').limit(2000);
-    if(currentPeriod === 'today'){
-      query = query.where('createdAt', '>=', startOfToday());
+    if(currentPeriod === 'week'){
+      query = query.where('createdAt', '>=', startOfWeek());
+    }else if(currentPeriod === 'month'){
+      query = query.where('createdAt', '>=', startOfMonth());
     }
+    // currentPeriod === 'all' の場合は期間フィルタなし
     const snap = await query.get();
 
     const counts = {};
