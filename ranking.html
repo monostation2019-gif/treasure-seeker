@@ -64,8 +64,68 @@
   .rank-name{flex:1; font-size:14.5px; font-weight:500;}
   .rank-count{font-size:13.5px; color:var(--forest-deep); font-weight:700;}
 
+  .rank-avatar{
+    width:32px; height:32px; border-radius:50%; flex-shrink:0;
+    object-fit:cover; background:var(--forest-soft); color:var(--forest-deep);
+    display:flex; align-items:center; justify-content:center;
+    font-size:13px; font-weight:700; overflow:hidden;
+  }
+  .rank-row.tappable{cursor:pointer;}
+  .rank-row.tappable:active{background:var(--forest-soft);}
+
+  .user-detail-overlay{
+    position:fixed; inset:0; z-index:1000; background:rgba(20,28,20,0.55);
+    display:none; align-items:center; justify-content:center; padding:24px;
+  }
+  .user-detail-overlay.show{display:flex;}
+  .user-detail-card{
+    background:#fff; border-radius:22px; padding:28px 22px 22px; text-align:center;
+    max-width:320px; width:100%; position:relative;
+  }
+  .user-detail-close{
+    position:absolute; top:12px; right:12px; width:28px; height:28px; border-radius:50%;
+    border:none; background:var(--forest-soft); color:var(--forest-deep);
+    display:flex; align-items:center; justify-content:center; font-size:16px; cursor:pointer; line-height:1;
+  }
+  .user-detail-rank{
+    display:inline-flex; align-items:center; justify-content:center;
+    width:34px; height:34px; border-radius:50%; font-weight:900; font-size:14px;
+    background:var(--forest-soft); color:var(--forest-deep); margin:0 auto 12px;
+  }
+  .user-detail-avatar{
+    width:64px; height:64px; border-radius:50%; margin:0 auto 12px; overflow:hidden;
+    background:var(--forest-soft); color:var(--forest-deep);
+    display:flex; align-items:center; justify-content:center;
+    font-size:24px; font-weight:700;
+  }
+  .user-detail-avatar img{width:100%; height:100%; object-fit:cover;}
+  .user-detail-name{font-family:"Kiwi Maru", serif; font-weight:500; font-size:16px; color:var(--forest-deep); margin-bottom:8px;}
+  .user-detail-bio{font-size:12.5px; color:var(--ink-soft); line-height:1.6; white-space:pre-wrap;}
+
   .rank-empty{text-align:center; padding:34px 14px; color:var(--ink-soft); font-size:13px; line-height:1.7;}
   .rank-empty svg{width:28px; height:28px; margin-bottom:8px; color:var(--line);}
+
+  .rank-row-extra{display:none;}
+  .rank-more-btn{
+    display:none; width:100%; margin-top:10px; padding:11px; border-radius:14px;
+    border:1.5px solid var(--line); background:var(--card); color:var(--forest-deep);
+    font-size:13px; font-weight:700; cursor:pointer;
+  }
+  .rank-more-btn:active{background:var(--forest-soft);}
+
+  .scroll-top-wrap{
+    position:fixed; left:50%; transform:translateX(-50%);
+    bottom:calc(78px + env(safe-area-inset-bottom,0px));
+    width:100%; max-width:480px; display:flex; justify-content:flex-end; padding-right:16px;
+    pointer-events:none; z-index:20; opacity:0; visibility:hidden; transition:opacity .2s ease;
+  }
+  .scroll-top-wrap.show{opacity:1; visibility:visible;}
+  .scroll-top-btn{
+    pointer-events:auto; width:38px; height:38px; border-radius:50%; border:none;
+    background:var(--forest); color:#fff; display:flex; align-items:center; justify-content:center;
+    box-shadow:0 4px 12px rgba(44,78,58,0.3); cursor:pointer;
+  }
+  .scroll-top-btn svg{width:18px; height:18px;}
 
   .skeleton-row{display:flex; align-items:center; gap:12px; padding:13px 12px;}
   .sk{background:linear-gradient(90deg,#EFEBDF 25%,#F6F3E9 37%,#EFEBDF 63%); background-size:400% 100%; animation:sk 1.4s ease infinite; border-radius:8px;}
@@ -106,6 +166,7 @@
       <button data-scope="neighborhoodAssoc">自治会別</button>
       <button data-scope="school">学校別</button>
       <button data-scope="company">企業別</button>
+      <button data-scope="user">ユーザー</button>
     </div>
   </header>
 
@@ -127,7 +188,24 @@
       <div class="skeleton-row"><div class="sk" style="width:32px;height:32px;border-radius:50%;"></div><div class="sk" style="flex:1;height:14px;"></div></div>
       <div class="skeleton-row"><div class="sk" style="width:32px;height:32px;border-radius:50%;"></div><div class="sk" style="flex:1;height:14px;"></div></div>
     </div>
+    <button class="rank-more-btn" id="rankMoreBtn">もっと見る</button>
   </main>
+
+  <div class="scroll-top-wrap" id="scrollTopWrap">
+    <button class="scroll-top-btn" id="scrollTopBtn" title="上に戻る">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+    </button>
+  </div>
+
+  <div class="user-detail-overlay" id="userDetailOverlay">
+    <div class="user-detail-card">
+      <button class="user-detail-close" id="userDetailClose" title="閉じる">&times;</button>
+      <div class="user-detail-rank" id="userDetailRank"></div>
+      <div class="user-detail-avatar" id="userDetailAvatar"></div>
+      <div class="user-detail-name" id="userDetailName"></div>
+      <div class="user-detail-bio" id="userDetailBio"></div>
+    </div>
+  </div>
 
   <nav class="bottom">
     <a href="home.html">
@@ -172,6 +250,16 @@ const rankCard     = document.getElementById('rankCard');
 const scopeTabs    = document.getElementById('scopeTabs');
 const periodToggle = document.querySelector('.period-toggle');
 const periodRangeEl = document.getElementById('periodRange');
+const rankMoreBtn   = document.getElementById('rankMoreBtn');
+const scrollTopWrap = document.getElementById('scrollTopWrap');
+const scrollTopBtn  = document.getElementById('scrollTopBtn');
+
+const userDetailOverlay = document.getElementById('userDetailOverlay');
+const userDetailClose   = document.getElementById('userDetailClose');
+const userDetailRank    = document.getElementById('userDetailRank');
+const userDetailAvatar  = document.getElementById('userDetailAvatar');
+const userDetailName    = document.getElementById('userDetailName');
+const userDetailBio     = document.getElementById('userDetailBio');
 
 let currentScope = 'town';   // town / neighborhoodAssoc / school / company の Firestore フィールド名
 let currentPeriod = 'week'; // week / month / all（累計＝今年）
@@ -249,6 +337,23 @@ async function loadRanking(){
     }
     const snap = await query.get();
 
+    if(currentScope === 'user'){
+      // ユーザー別は uid で集計する（uid が無いゲスト投稿は表示名でまとめる）
+      const byUser = {};
+      snap.forEach(doc => {
+        const d = doc.data();
+        const name = d.displayName || '名無しの発見者';
+        const key = d.uid || name;
+        if(!byUser[key]){
+          byUser[key] = { name, count:0, uid: d.uid || null };
+        }
+        byUser[key].count += 1;
+      });
+      const sortedUsers = Object.values(byUser).sort((a,b) => b.count - a.count);
+      await renderUserRanking(sortedUsers);
+      return;
+    }
+
     const counts = {};
     snap.forEach(doc => {
       const d = doc.data();
@@ -276,19 +381,118 @@ function renderRanking(sorted){
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 6h18M5 6v14M19 6v14M2 3h20M7 10h10"/></svg>
         まだこの区分のデータがありません
       </div>`;
+    setupMoreButton(0);
     return;
   }
 
   rankCard.innerHTML = sorted.map(([name, count], i) => {
     const medalClass = i === 0 ? 'm1' : i === 1 ? 'm2' : i === 2 ? 'm3' : 'mn';
+    const extraClass = i >= 5 ? ' rank-row-extra' : '';
     return `
-      <div class="rank-row">
+      <div class="rank-row${extraClass}">
         <div class="rank-medal ${medalClass}">${i+1}</div>
         <div class="rank-name">${escapeHtml(name)}</div>
         <div class="rank-count">${count.toLocaleString()}個</div>
       </div>`;
   }).join('');
+
+  setupMoreButton(sorted.length);
 }
+
+async function renderUserRanking(sortedUsers){
+  if(sortedUsers.length === 0){
+    rankCard.innerHTML = `
+      <div class="rank-empty">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 6h18M5 6v14M19 6v14M2 3h20M7 10h10"/></svg>
+        まだこの区分のデータがありません
+      </div>`;
+    setupMoreButton(0);
+    return;
+  }
+
+  // 表示中の各ユーザーの photoURL / ひとこと(bio) を取得しておく（タップ時に再取得しないようキャッシュする）
+  const withProfile = await Promise.all(sortedUsers.map(async (entry) => {
+    if(!entry.uid) return { ...entry, photoURL:null, bio:'' };
+    try{
+      const doc = await db.collection('users').doc(entry.uid).get();
+      const data = doc.exists ? doc.data() : null;
+      return { ...entry, photoURL: (data && data.photoURL) || null, bio: (data && data.bio) || '' };
+    }catch(e){
+      console.warn('ユーザー情報の取得に失敗しました', e);
+      return { ...entry, photoURL:null, bio:'' };
+    }
+  }));
+
+  userProfileCache = withProfile;
+
+  const medalClasses = ['m1','m2','m3'];
+  rankCard.innerHTML = withProfile.map((entry, i) => {
+    const medalClass = medalClasses[i] || 'mn';
+    const extraClass = i >= 5 ? ' rank-row-extra' : '';
+    const initial = escapeHtml((entry.name || '？').trim().charAt(0).toUpperCase() || '？');
+    const avatar = entry.photoURL
+      ? `<img class="rank-avatar" src="${escapeHtml(entry.photoURL)}" alt="" referrerpolicy="no-referrer" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'rank-avatar',textContent:'${initial}'}))">`
+      : `<div class="rank-avatar">${initial}</div>`;
+    return `
+      <div class="rank-row tappable${extraClass}" data-index="${i}">
+        <div class="rank-medal ${medalClass}">${i+1}</div>
+        ${avatar}
+        <div class="rank-name">${escapeHtml(entry.name)}</div>
+        <div class="rank-count">${entry.count.toLocaleString()}個</div>
+      </div>`;
+  }).join('');
+
+  setupMoreButton(withProfile.length);
+}
+
+/* 6位以降の表示切り替え（「もっと見る」ボタン）と、上に戻るボタンの表示制御。
+   スコープ／期間の切り替えで再描画されるたびに、6位以降は必ず一旦隠した状態に戻す。 */
+function setupMoreButton(totalCount){
+  if(totalCount > 5){
+    rankMoreBtn.style.display = 'block';
+  }else{
+    rankMoreBtn.style.display = 'none';
+  }
+  scrollTopWrap.classList.remove('show');
+}
+
+rankMoreBtn.addEventListener('click', () => {
+  rankCard.querySelectorAll('.rank-row-extra').forEach(row => row.classList.remove('rank-row-extra'));
+  rankMoreBtn.style.display = 'none';
+  scrollTopWrap.classList.add('show');
+});
+
+scrollTopBtn.addEventListener('click', () => {
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+});
+
+/* ユーザー別ランキングの行タップ → 詳細モーダル（順位・アイコン・ニックネーム・ひとこと） */
+let userProfileCache = [];
+
+rankCard.addEventListener('click', (e) => {
+  const row = e.target.closest('.rank-row.tappable');
+  if(!row) return;
+  const idx = Number(row.dataset.index);
+  const entry = userProfileCache[idx];
+  if(!entry) return;
+
+  const initial = escapeHtml((entry.name || '？').trim().charAt(0).toUpperCase() || '？');
+  userDetailRank.textContent = `${idx+1}位`;
+  userDetailAvatar.innerHTML = entry.photoURL
+    ? `<img src="${escapeHtml(entry.photoURL)}" alt="" referrerpolicy="no-referrer" onerror="this.parentElement.textContent='${initial}'">`
+    : initial;
+  userDetailName.textContent = entry.name;
+  userDetailBio.textContent = entry.bio && entry.bio.trim() ? entry.bio.trim() : 'ひとことはまだ設定されていません';
+  userDetailOverlay.classList.add('show');
+});
+
+function closeUserDetail(){
+  userDetailOverlay.classList.remove('show');
+}
+userDetailClose.addEventListener('click', closeUserDetail);
+userDetailOverlay.addEventListener('click', (e) => {
+  if(e.target === userDetailOverlay) closeUserDetail();
+});
 
 scopeTabs.addEventListener('click', (e) => {
   const btn = e.target.closest('button');
