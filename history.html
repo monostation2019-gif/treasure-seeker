@@ -479,27 +479,36 @@ async function handleDelete(id){
   if(!confirm('この記録を削除しますか？この操作は取り消せません。')) return;
 
   try{
+    // まず記録本体と写真を削除する。ここが成功すれば「削除」自体は完了とみなす。
     await db.collection('reports').doc(id).delete();
     await db.collection('reportPhotos').doc(id).delete().catch(() => {});
+  }catch(err){
+    console.error('削除に失敗しました', err);
+    alert('削除に失敗しました。もう一度お試しください。');
+    return;
+  }
 
+  // 削除が確定したので、統計更新の成否に関わらず先に画面から反映する
+  myReports = myReports.filter(x => x.id !== id);
+  const rowEl = historyListEl.querySelector(`.history-row[data-id="${CSS.escape(id)}"]`);
+  if(rowEl) rowEl.remove();
+  if(myReports.length === 0){
+    historyListEl.innerHTML = `
+      <div class="history-empty">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 9v4M12 17h.01"/><circle cx="12" cy="12" r="9"/></svg>
+        まだ発見・回収の記録がありません
+      </div>`;
+  }
+
+  // 統計(totalFinds/totalCollected)の更新は付随処理。ここが権限エラー等で
+  // 失敗しても、既に削除・画面反映は完了しているのでユーザーには影響させない。
+  try{
     await db.collection('users').doc(currentUser.uid).set({
       totalFinds: firebase.firestore.FieldValue.increment(-1),
       totalCollected: firebase.firestore.FieldValue.increment(r.isBulky ? -1 : 0)
     }, { merge: true });
-
-    myReports = myReports.filter(x => x.id !== id);
-    const rowEl = historyListEl.querySelector(`.history-row[data-id="${CSS.escape(id)}"]`);
-    if(rowEl) rowEl.remove();
-    if(myReports.length === 0){
-      historyListEl.innerHTML = `
-        <div class="history-empty">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 9v4M12 17h.01"/><circle cx="12" cy="12" r="9"/></svg>
-          まだ発見・回収の記録がありません
-        </div>`;
-    }
   }catch(err){
-    console.error('削除に失敗しました', err);
-    alert('削除に失敗しました。もう一度お試しください。');
+    console.warn('統計情報の更新に失敗しました（削除自体は完了しています）', err);
   }
 }
 

@@ -145,7 +145,7 @@
   <div class="map-wrap">
     <div id="map"></div>
 
-    <div class="legend" id="heatLegend" style="display:none;">
+    <div class="legend" id="heatLegend">
       <div class="title" id="heatLegendTitle">ゴミの多さ（すべて）</div>
       <div class="legend-row"><span class="swatch" style="background:#4F8FE0;"></span>1〜3個</div>
       <div class="legend-row"><span class="swatch" style="background:#4CAF6D;"></span>4〜7個</div>
@@ -156,9 +156,6 @@
     </div>
 
     <div class="fab-col">
-      <button class="fab" id="heatToggle" title="ヒートマップ切替">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/></svg>
-      </button>
       <button class="fab" id="locateBtn" title="現在地へ移動">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
       </button>
@@ -204,11 +201,12 @@ const auth = firebase.auth();
 const db = firebase.firestore();
 
 const LOGIN_PAGE = "login.html";
-const ISE_CENTER = [34.4859, 136.7096]; // 伊勢神宮 内宮付近を初期中心に設定
+const ISE_CENTER = [34.4859, 136.7096]; // 伊勢神宮 内宮付近（現在地移動などの基準点として使用）
+// 伊勢市全域（北の二見・小俣方面から南の宮川上流・旧御薗村エリアまで）が収まる範囲
+const ISE_CITY_BOUNDS = L.latLngBounds([34.375, 136.615], [34.585, 136.825]);
 
 const overlay   = document.getElementById('loadingOverlay');
 const toastEl   = document.getElementById('toast');
-const heatToggle= document.getElementById('heatToggle');
 const locateBtn = document.getElementById('locateBtn');
 const legendEl  = document.getElementById('heatLegend');
 const heatLegendTitleEl = document.getElementById('heatLegendTitle');
@@ -230,35 +228,15 @@ function showToast(msg){
   setTimeout(() => toastEl.classList.remove('show'), 2200);
 }
 
-/* ---------------------------------------------------------------------
-   カテゴリごとのアイコン（Leaflet divIcon、絵文字で軽量に表現）
-   --------------------------------------------------------------------- */
-const CATEGORY_EMOJI = {
-  'ペットボトル':'💧', 'たばこ吸い殻':'🚬', '空き缶':'🥫', 'プラスチック':'♻️',
-  '危険物':'⚠️', 'ビン':'🍾', '紙類':'📄', '大型ゴミ':'🛋️'
-};
-function makeIcon(category){
-  const emoji = CATEGORY_EMOJI[category] || '📍';
-  return L.divIcon({
-    className: 'gomi-marker',
-    html: `<div style="width:32px;height:32px;border-radius:50% 50% 50% 0;transform:rotate(45deg);background:#fff;box-shadow:0 3px 8px rgba(44,78,58,0.3);display:flex;align-items:center;justify-content:center;border:2px solid #3E6B4F;">
-             <span style="transform:rotate(-45deg);font-size:15px;">${emoji}</span>
-           </div>`,
-    iconSize:[32,32], iconAnchor:[16,32], popupAnchor:[0,-30]
-  });
-}
-
-const map = L.map('map', { zoomControl:false }).setView(ISE_CENTER, 14);
+const map = L.map('map', { zoomControl:false }).fitBounds(ISE_CITY_BOUNDS);
 L.control.zoom({ position:'bottomright' }).addTo(map);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   maxZoom: 19,
   attribution: '&copy; OpenStreetMap contributors'
 }).addTo(map);
 
-const markerLayer = L.layerGroup().addTo(map);
-let allReports = []; // { id, lat, lng, category, marker }
+let allReports = []; // { id, lat, lng, category, memo, ... }
 let activeCategory = 'all';
-let heatOn = false;
 let heatLayerGroup = null;
 
 /* ---------------------------------------------------------------------
@@ -276,15 +254,21 @@ function maybeJumpToReport(){
   if(Number.isNaN(jumpLat) || Number.isNaN(jumpLng)) return;
   didJumpToReport = true;
   map.setView([jumpLat, jumpLng], 17);
+
+  // ピン表示は廃止したので、対象地点を一時的にマーカーでハイライトする
+  L.circleMarker([jumpLat, jumpLng], {
+    radius:10, weight:3, color:'#3E6B4F', fillColor:'#F4D35E', fillOpacity:0.85
+  }).addTo(map);
+
   if(!jumpId) return;
-  setTimeout(() => {
-    markerLayer.eachLayer(m => {
-      const ll = m.getLatLng();
-      if(Math.abs(ll.lat - jumpLat) < 1e-6 && Math.abs(ll.lng - jumpLng) < 1e-6){
-        m.openPopup();
-      }
-    });
-  }, 300);
+  const report = allReports.find(r => r.id === jumpId);
+  if(!report) return;
+  const popup = L.popup()
+    .setLatLng([jumpLat, jumpLng])
+    .setContent(buildPopupHtml(report))
+    .openOn(map);
+  const img = document.getElementById('photo-' + report.id);
+  if(img) loadPhotoLazily(report.id, img);
 }
 
 /* ---------------------------------------------------------------------
@@ -323,22 +307,6 @@ function buildPopupHtml(report){
 
 function escapeHtml(str){
   return String(str).replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
-}
-
-function renderMarkers(){
-  markerLayer.clearLayers();
-  allReports.forEach(r => {
-    if(activeCategory !== 'all' && r.category !== activeCategory) return;
-    if(typeof r.lat !== 'number' || typeof r.lng !== 'number') return;
-
-    const marker = L.marker([r.lat, r.lng], { icon: makeIcon(r.category) });
-    marker.bindPopup(buildPopupHtml(r));
-    marker.on('popupopen', () => {
-      const img = document.getElementById('photo-' + r.id);
-      if(img) loadPhotoLazily(r.id, img);
-    });
-    marker.addTo(markerLayer);
-  });
 }
 
 /* ---------------------------------------------------------------------
@@ -398,7 +366,7 @@ function renderHeatGrid(){
   });
 
   updateHeatLegendTitle();
-  if(heatOn) heatLayerGroup.addTo(map);
+  heatLayerGroup.addTo(map);
 }
 
 function updateHeatLegendTitle(){
@@ -415,7 +383,6 @@ function updateHeatLegendTitle(){
 function subscribeReports(){
   db.collection('reports').limit(1000).onSnapshot(snap => {
     allReports = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    renderMarkers();
     renderHeatGrid();
     maybeJumpToReport();
   }, err => {
@@ -430,23 +397,7 @@ document.getElementById('categoryChips').addEventListener('click', (e) => {
   document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
   chip.classList.add('active');
   activeCategory = chip.dataset.cat;
-  renderMarkers();
   renderHeatGrid();
-});
-
-heatToggle.addEventListener('click', () => {
-  heatOn = !heatOn;
-  heatToggle.classList.toggle('on', heatOn);
-  legendEl.style.display = heatOn ? 'block' : 'none';
-
-  if(heatOn){
-    // ヒートマップ表示中は種類別ピンを隠し、色分けの円だけを見せる
-    map.removeLayer(markerLayer);
-    if(heatLayerGroup) heatLayerGroup.addTo(map);
-  } else {
-    if(heatLayerGroup) map.removeLayer(heatLayerGroup);
-    markerLayer.addTo(map);
-  }
 });
 
 /* ---------------------------------------------------------------------
