@@ -150,6 +150,12 @@
   .rank-medal.m1{background:#FCE9BE; color:#9C6B0A;}
   .rank-medal.m2{background:#E7E9EC; color:#5C6570;}
   .rank-medal.m3{background:#F1DCC9; color:#8A5327;}
+  .rank-avatar{
+    width:30px; height:30px; border-radius:50%; flex-shrink:0;
+    object-fit:cover; background:var(--forest-soft); color:var(--forest-deep);
+    display:flex; align-items:center; justify-content:center;
+    font-size:13px; font-weight:700; overflow:hidden;
+  }
   .rank-name{flex:1; font-size:14px; font-weight:500;}
   .rank-count{font-size:13px; color:var(--forest-deep); font-weight:700;}
   .rank-empty{
@@ -369,7 +375,7 @@ async function loadTodayStats(){
 
     let findsTotal = 0;
     let bulkyTotal = 0;
-    const byUser = {};
+    const byUser = {}; // key: uid（無ければ表示名）→ { name, count, uid }
 
     snap.forEach(doc => {
       const d = doc.data();
@@ -378,7 +384,11 @@ async function loadTodayStats(){
         bulkyTotal += 1;
       }
       const name = d.displayName || '名無しの発見者';
-      byUser[name] = (byUser[name] || 0) + 1;
+      const key = d.uid || name; // uid が無い投稿（ゲスト等）は名前でまとめる
+      if(!byUser[key]){
+        byUser[key] = { name, count:0, uid: d.uid || null };
+      }
+      byUser[key].count += 1;
     });
 
     findsCountEl.classList.remove('skeleton');
@@ -386,7 +396,7 @@ async function loadTodayStats(){
     findsCountEl.textContent = findsTotal.toLocaleString();
     bulkyCountEl.textContent = bulkyTotal.toLocaleString();
 
-    renderRanking(byUser);
+    await renderRanking(byUser);
   }catch(err){
     console.error('今日の統計の取得に失敗しました', err);
     findsCountEl.classList.remove('skeleton');
@@ -397,9 +407,9 @@ async function loadTodayStats(){
   }
 }
 
-function renderRanking(byUser){
-  const sorted = Object.entries(byUser)
-    .sort((a,b) => b[1]-a[1])
+async function renderRanking(byUser){
+  const sorted = Object.values(byUser)
+    .sort((a,b) => b.count - a.count)
     .slice(0,3);
 
   if(sorted.length === 0){
@@ -407,14 +417,34 @@ function renderRanking(byUser){
     return;
   }
 
+  // 上位3名分だけ、プロフィール写真(photoURL)を users コレクションから取得する
+  const withPhoto = await Promise.all(sorted.map(async (entry) => {
+    if(!entry.uid) return { ...entry, photoURL:null };
+    try{
+      const doc = await db.collection('users').doc(entry.uid).get();
+      const photoURL = doc.exists ? (doc.data().photoURL || null) : null;
+      return { ...entry, photoURL };
+    }catch(e){
+      console.warn('プロフィール写真の取得に失敗しました', e);
+      return { ...entry, photoURL:null };
+    }
+  }));
+
   const medalClasses = ['m1','m2','m3'];
-  rankListEl.innerHTML = sorted.map(([name, count], i) => `
+  rankListEl.innerHTML = withPhoto.map((entry, i) => {
+    const initial = escapeHtml((entry.name || '？').trim().charAt(0).toUpperCase() || '？');
+    const avatar = entry.photoURL
+      ? `<img class="rank-avatar" src="${escapeHtml(entry.photoURL)}" alt="" referrerpolicy="no-referrer" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'rank-avatar',textContent:'${initial}'}))">`
+      : `<div class="rank-avatar">${initial}</div>`;
+    return `
     <div class="rank-row">
       <div class="rank-medal ${medalClasses[i]}">${i+1}</div>
-      <div class="rank-name">${escapeHtml(name)}</div>
-      <div class="rank-count">${count.toLocaleString()}個</div>
+      ${avatar}
+      <div class="rank-name">${escapeHtml(entry.name)}</div>
+      <div class="rank-count">${entry.count.toLocaleString()}個</div>
     </div>
-  `).join('');
+  `;
+  }).join('');
 }
 
 function escapeHtml(str){
