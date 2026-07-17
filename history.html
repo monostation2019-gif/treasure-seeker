@@ -375,6 +375,7 @@ const deleteConfirmOverlay = document.getElementById('deleteConfirmOverlay');
 const deleteCancelBtn      = document.getElementById('deleteCancelBtn');
 const deleteOkBtn          = document.getElementById('deleteOkBtn');
 let pendingDeleteId = null;
+let pendingDeleteKind = 'report';
 
 /* 種類ごとの絵文字（発見する / クリーンマップと同じマスター） */
 const CATEGORY_EMOJI = {
@@ -384,6 +385,8 @@ const CATEGORY_EMOJI = {
 
 let currentUser = null;
 let myReports = [];
+let myCollections = [];  // 他ユーザーが見つけたゴミを、自分が回収した記録（collections コレクション）
+let historyEntries = [];  // myReports + myCollections をまとめて日時順に並べたもの
 
 // 編集中の状態
 let editingId = null;
@@ -413,13 +416,16 @@ async function loadHistory(){
     // uid の等価条件のみで取得する（orderByを併用すると複合インデックスが必要になり、
     // 未作成の場合はクエリが失敗して一覧が反映されない原因になるため、並び替えは
     // クライアント側で行う）
-    const snap = await db.collection('reports')
-      .where('uid', '==', currentUser.uid)
-      .limit(200)
-      .get();
+    const [reportsSnap, collectionsSnap] = await Promise.all([
+      db.collection('reports').where('uid', '==', currentUser.uid).limit(200).get(),
+      db.collection('collections').where('collectorUid', '==', currentUser.uid).limit(200).get()
+    ]);
 
-    myReports = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    myReports.sort((a, b) => {
+    myReports = reportsSnap.docs.map(doc => ({ id: doc.id, ...doc.data(), _kind: 'report' }));
+    myCollections = collectionsSnap.docs.map(doc => ({ id: doc.id, ...doc.data(), _kind: 'collection' }));
+
+    historyEntries = [...myReports, ...myCollections];
+    historyEntries.sort((a, b) => {
       const at = a.createdAt && a.createdAt.toMillis ? a.createdAt.toMillis() : 0;
       const bt = b.createdAt && b.createdAt.toMillis ? b.createdAt.toMillis() : 0;
       return bt - at;
@@ -438,7 +444,7 @@ async function loadHistory(){
 
 /* 一覧全体の再描画（空状態も含めて一元管理する） */
 function renderHistoryList(){
-  if(myReports.length === 0){
+  if(historyEntries.length === 0){
     historyListEl.innerHTML = `
       <div class="history-empty">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 9v4M12 17h.01"/><circle cx="12" cy="12" r="9"/></svg>
@@ -446,19 +452,36 @@ function renderHistoryList(){
       </div>`;
     return;
   }
-  historyListEl.innerHTML = myReports.map(renderRow).join('');
+  historyListEl.innerHTML = historyEntries.map(renderRow).join('');
   loadThumbnails();
 }
 
 function renderRow(r){
   const emoji = CATEGORY_EMOJI[r.category] || '🗑️';
-  const isCollected = !!r.isBulky;
+  const isCollection = r._kind === 'collection';
+  // collection（他ユーザーが見つけたゴミを自分が回収した記録）は常に「回収」バッジ。
+  // report（自分の発見記録）は、大型ゴミ回収トグル(isBulky)の状態で「発見」/「回収」を出し分ける。
+  const isCollected = isCollection || !!r.isBulky;
   const subParts = [];
   if(r.town) subParts.push(escapeHtml(r.town));
   if(r.memo) subParts.push(escapeHtml(r.memo));
 
+  // 地図へジャンプする際は、必ず元のゴミ報告(reports)の地点・IDを使う
+  const jumpId = isCollection ? (r.reportId || '') : r.id;
+
+  const actionsHtml = isCollection
+    ? `<button class="icon-btn delete-btn" data-id="${r.id}" data-kind="collection" title="回収記録を取り消す">
+         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/></svg>
+       </button>`
+    : `<button class="icon-btn edit-btn" data-id="${r.id}" title="編集">
+         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
+       </button>
+       <button class="icon-btn delete-btn" data-id="${r.id}" data-kind="report" title="削除">
+         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/></svg>
+       </button>`;
+
   return `
-    <div class="history-row" data-id="${r.id}" data-lat="${r.lat ?? ''}" data-lng="${r.lng ?? ''}">
+    <div class="history-row" data-id="${r.id}" data-kind="${r._kind}" data-jump-id="${jumpId}" data-lat="${r.lat ?? ''}" data-lng="${r.lng ?? ''}">
       <div class="thumb-wrap" id="thumb-${r.id}"><div class="thumb-icon">${emoji}</div></div>
       <div class="history-main">
         <div class="history-top">
@@ -469,20 +492,17 @@ function renderRow(r){
         <div class="history-date">${formatDate(r.createdAt)}</div>
       </div>
       <div class="history-actions">
-        <button class="icon-btn edit-btn" data-id="${r.id}" title="編集">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
-        </button>
-        <button class="icon-btn delete-btn" data-id="${r.id}" title="削除">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/></svg>
-        </button>
+        ${actionsHtml}
       </div>
     </div>`;
 }
 
-/* 写真は reportPhotos コレクションに分離されているため、一覧表示後に個別取得する */
+/* 写真は reportPhotos / collectionPhotos コレクションに分離されているため、
+   一覧表示後に個別取得する（発見記録は reportPhotos、回収記録は collectionPhotos）。 */
 function loadThumbnails(){
-  myReports.forEach(r => {
-    db.collection('reportPhotos').doc(r.id).get().then(doc => {
+  historyEntries.forEach(r => {
+    const photoCollection = r._kind === 'collection' ? 'collectionPhotos' : 'reportPhotos';
+    db.collection(photoCollection).doc(r.id).get().then(doc => {
       if(doc.exists && doc.data().imageBase64){
         const wrap = document.getElementById('thumb-' + r.id);
         if(wrap){ wrap.innerHTML = `<img src="${doc.data().imageBase64}" alt="">`; }
@@ -499,13 +519,13 @@ historyListEl.addEventListener('click', (e) => {
   if(editBtn){ openEditModal(editBtn.dataset.id); return; }
 
   const deleteBtn = e.target.closest('.delete-btn');
-  if(deleteBtn){ openDeleteConfirm(deleteBtn.dataset.id); return; }
+  if(deleteBtn){ openDeleteConfirm(deleteBtn.dataset.id, deleteBtn.dataset.kind); return; }
 
   const row = e.target.closest('.history-row');
   if(row){
     const lat = parseFloat(row.dataset.lat), lng = parseFloat(row.dataset.lng);
     if(!Number.isNaN(lat) && !Number.isNaN(lng)){
-      window.location.href = `map.html?lat=${lat}&lng=${lng}&id=${encodeURIComponent(row.dataset.id)}`;
+      window.location.href = `map.html?lat=${lat}&lng=${lng}&id=${encodeURIComponent(row.dataset.jumpId || row.dataset.id)}`;
     }
   }
 });
@@ -515,8 +535,9 @@ historyListEl.addEventListener('click', (e) => {
    （ブラウザ標準の confirm() は端末・PWA表示モードによっては表示されず、
    タップしても何も起きないように見えるケースがあるため自前で実装する）
    --------------------------------------------------------------------- */
-function openDeleteConfirm(id){
+function openDeleteConfirm(id, kind){
   pendingDeleteId = id;
+  pendingDeleteKind = kind || 'report';
   deleteConfirmOverlay.classList.add('show');
 }
 function closeDeleteConfirm(){
@@ -529,8 +550,11 @@ deleteConfirmOverlay.addEventListener('click', (e) => {
 });
 deleteOkBtn.addEventListener('click', async () => {
   const id = pendingDeleteId;
+  const kind = pendingDeleteKind;
   closeDeleteConfirm();
-  if(id) await performDelete(id);
+  if(!id) return;
+  if(kind === 'collection') await performDeleteCollection(id);
+  else await performDelete(id);
 });
 
 async function performDelete(id){
@@ -555,6 +579,7 @@ async function performDelete(id){
 
   // 削除が確定したので、ローカル一覧を更新して再描画する
   myReports = myReports.filter(x => x.id !== id);
+  historyEntries = historyEntries.filter(x => x.id !== id);
   renderHistoryList();
 
   // 統計(totalFinds/totalCollected)の更新も付随処理。ここが権限エラー等で
@@ -567,6 +592,50 @@ async function performDelete(id){
   }catch(err){
     console.warn('統計情報の更新に失敗しました（削除自体は完了しています）', err);
   }
+}
+
+/* ---------------------------------------------------------------------
+   回収記録の取り消し（他ユーザーが見つけたゴミを自分が回収した記録）。
+   自分の履歴から消すだけでなく、元の報告(reports)を「未回収」に戻し、
+   他のユーザーが再びそのゴミを地図上で回収できるようにする。
+   --------------------------------------------------------------------- */
+async function performDeleteCollection(id){
+  const c = myCollections.find(x => x.id === id);
+  if(!c) return;
+
+  deleteOkBtn.disabled = true;
+
+  try{
+    // まず自分の回収記録を削除する。これが成功すれば「取り消し」自体は完了とみなす。
+    await db.collection('collections').doc(id).delete();
+  }catch(err){
+    console.error('回収記録の削除に失敗しました', err && err.code, err && err.message);
+    alert(`取り消しに失敗しました。もう一度お試しください。${err && err.code ? `\n(${err.code})` : ''}`);
+    deleteOkBtn.disabled = false;
+    return;
+  }
+  deleteOkBtn.disabled = false;
+
+  // 写真の削除は付随処理
+  await db.collection('collectionPhotos').doc(id).delete().catch(() => {});
+
+  // 元の報告を「未回収」に戻す（他ユーザーが再度回収できるように）。
+  // これも付随処理として扱い、失敗しても自分の履歴からの削除は成立させる。
+  if(c.reportId){
+    try{
+      await db.collection('reports').doc(c.reportId).update({
+        collected: false,
+        collectedBy: firebase.firestore.FieldValue.delete(),
+        collectedAt: firebase.firestore.FieldValue.delete()
+      });
+    }catch(err){
+      console.warn('元の報告を未回収に戻せませんでした', err);
+    }
+  }
+
+  myCollections = myCollections.filter(x => x.id !== id);
+  historyEntries = historyEntries.filter(x => x.id !== id);
+  renderHistoryList();
 }
 
 /* ---------------------------------------------------------------------

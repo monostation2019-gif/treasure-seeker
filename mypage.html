@@ -340,13 +340,21 @@ function renderProfile(data, user){
    --------------------------------------------------------------------- */
 async function renderStatsFromReports(uid){
   try{
-    const snap = await db.collection('reports').where('uid', '==', uid).get();
-    const totalFinds = snap.size;
+    // 総発見数・大型ゴミの自己回収数（自分の reports から集計）と、
+    // 他ユーザーが見つけたゴミを実際に回収した記録数（collections から集計）を
+    // 両方合算して「総回収数」とする。
+    const [reportsSnap, collectionsSnap] = await Promise.all([
+      db.collection('reports').where('uid', '==', uid).get(),
+      db.collection('collections').where('collectorUid', '==', uid).get()
+    ]);
+
+    const totalFinds = reportsSnap.size;
 
     let totalCollected = 0;
-    snap.forEach(doc => {
+    reportsSnap.forEach(doc => {
       if(doc.data().isBulky === true) totalCollected++;
     });
+    totalCollected += collectionsSnap.size;
 
     statFindsEl.textContent = totalFinds.toLocaleString();
     statCollectedEl.textContent = totalCollected.toLocaleString();
