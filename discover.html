@@ -687,7 +687,9 @@ submitBtn.addEventListener('click', async () => {
     reportRef = await db.collection('reports').add(reportData);
   }catch(err){
     console.error('発見の記録に失敗しました', err);
-    alert('記録に失敗しました。通信状況を確認してもう一度お試しください。');
+    const code = err && err.code ? err.code : '';
+    const msg  = err && err.message ? err.message : String(err);
+    alert('記録に失敗しました。通信状況を確認してもう一度お試しください。\n[' + code + '] ' + msg);
     setSubmitBusy(false);
     return;
   }

@@ -320,18 +320,46 @@ function renderProfile(data, user){
   levelTextEl.textContent = `Lv.${data.level || 1}`;
   titleChipEl.textContent = data.title || '称号なし';
 
-  statFindsEl.textContent = (data.totalFinds || 0).toLocaleString();
-  statCollectedEl.textContent = (data.totalCollected || 0).toLocaleString();
-
-  /* CO2削減量は仮の概算式（1個あたり約0.02kg換算）。
-     実際の算出ロジックが決まったら差し替えてください。 */
-  const co2 = ((data.totalFinds || 0) * 0.02).toFixed(1);
-  statCO2El.textContent = `${co2}kg`;
-
   renderBadges(data.badges);
 
   bioInput.value = data.bio || '';
   bioCount.textContent = bioInput.value.length;
+}
+
+/* ---------------------------------------------------------------------
+   発見総数・回収数は users.totalFinds/totalCollected（discover.html が
+   投稿の度に+1している値）ではなく、reports コレクションを直接
+   count() 集計して表示する。
+   理由：users側の数値は書き込みタイミングやセキュリティルールの状態に
+   よって reports の実態とズレることがある（実際に発生した不具合）。
+   map.html / ranking.html / history.html はいずれも reports を直接
+   集計しているため、マイページも同じ情報源に揃えることで、
+   「他画面には反映されているのにマイページだけ0のまま」という
+   ズレが構造的に起きないようにする。
+   --------------------------------------------------------------------- */
+async function renderStatsFromReports(uid){
+  try{
+    const totalSnap = await db.collection('reports').where('uid', '==', uid).count().get();
+    const totalFinds = totalSnap.data().count;
+
+    const bulkySnap = await db.collection('reports')
+      .where('uid', '==', uid)
+      .where('isBulky', '==', true)
+      .count().get();
+    const totalCollected = bulkySnap.data().count;
+
+    statFindsEl.textContent = totalFinds.toLocaleString();
+    statCollectedEl.textContent = totalCollected.toLocaleString();
+
+    /* CO2削減量は仮の概算式（1個あたり約0.02kg換算）。
+       実際の算出ロジックが決まったら差し替えてください。 */
+    statCO2El.textContent = `${(totalFinds * 0.02).toFixed(1)}kg`;
+  }catch(err){
+    console.error('発見統計の集計に失敗しました', err);
+    statFindsEl.textContent = '—';
+    statCollectedEl.textContent = '—';
+    statCO2El.textContent = '—';
+  }
 }
 
 editNameBtn.addEventListener('click', async () => {
@@ -487,6 +515,8 @@ auth.onAuthStateChanged(async (user) => {
     console.error('プロフィールの取得に失敗しました', err);
     displayNameEl.textContent = '取得エラー';
   }
+
+  renderStatsFromReports(user.uid);
 
   overlay.style.opacity = '0';
   setTimeout(() => overlay.style.display = 'none', 350);
