@@ -327,24 +327,26 @@ function renderProfile(data, user){
 /* ---------------------------------------------------------------------
    発見総数・回収数は users.totalFinds/totalCollected（discover.html が
    投稿の度に+1している値）ではなく、reports コレクションを直接
-   count() 集計して表示する。
+   集計して表示する。
    理由：users側の数値は書き込みタイミングやセキュリティルールの状態に
    よって reports の実態とズレることがある（実際に発生した不具合）。
    map.html / ranking.html / history.html はいずれも reports を直接
    集計しているため、マイページも同じ情報源に揃えることで、
    「他画面には反映されているのにマイページだけ0のまま」という
    ズレが構造的に起きないようにする。
+   ※ count() 集計クエリではなく、history.html と同じ「対象ドキュメントを
+   取得してその件数を数える」方式に統一している（history.html で
+   確実に動作することが確認できているため、環境差異のリスクが少ない）。
    --------------------------------------------------------------------- */
 async function renderStatsFromReports(uid){
   try{
-    const totalSnap = await db.collection('reports').where('uid', '==', uid).count().get();
-    const totalFinds = totalSnap.data().count;
+    const snap = await db.collection('reports').where('uid', '==', uid).get();
+    const totalFinds = snap.size;
 
-    const bulkySnap = await db.collection('reports')
-      .where('uid', '==', uid)
-      .where('isBulky', '==', true)
-      .count().get();
-    const totalCollected = bulkySnap.data().count;
+    let totalCollected = 0;
+    snap.forEach(doc => {
+      if(doc.data().isBulky === true) totalCollected++;
+    });
 
     statFindsEl.textContent = totalFinds.toLocaleString();
     statCollectedEl.textContent = totalCollected.toLocaleString();
