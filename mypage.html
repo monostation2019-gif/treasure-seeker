@@ -61,19 +61,6 @@
   .edit-name{background:none; border:none; color:var(--ink-soft); cursor:pointer; padding:2px;}
   .edit-name svg{width:14px; height:14px;}
 
-  .level-badge{
-    display:inline-flex; align-items:center; gap:6px;
-    background:linear-gradient(135deg,#FCE9BE,#F4C86A); color:#8A5B0A;
-    font-size:12px; font-weight:900; padding:5px 12px; border-radius:999px;
-    margin-top:8px;
-  }
-  .level-badge svg{width:13px; height:13px;}
-
-  .title-chip{
-    display:inline-block; margin-top:8px; font-size:11.5px; font-weight:700;
-    color:var(--forest-deep); background:var(--forest-soft); padding:4px 12px; border-radius:999px;
-  }
-
   .stats-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:0; margin-top:18px; border-top:1px solid var(--line); padding-top:16px;}
   .stats-grid .stat{text-align:center;}
   .stats-grid .stat + .stat{border-left:1px solid var(--line);}
@@ -103,18 +90,6 @@
   }
   .bio-save:active{background:var(--forest); color:#fff;}
   .bio-save.saved{background:var(--forest); color:#fff;}
-
-  .badge-row{display:flex; gap:10px; flex-wrap:wrap;}
-  .badge{
-    width:56px; display:flex; flex-direction:column; align-items:center; gap:5px;
-  }
-  .badge .ico{
-    width:48px; height:48px; border-radius:50%;
-    background:var(--forest-soft); display:flex; align-items:center; justify-content:center;
-    font-size:20px;
-  }
-  .badge.locked .ico{background:#F1EEE3; color:#C9C3AE; filter:grayscale(1); opacity:.7;}
-  .badge span{font-size:9.5px; color:var(--ink-soft); text-align:center; line-height:1.3;}
 
   .menu-card{background:var(--card); border-radius:16px; box-shadow:0 6px 16px rgba(44,78,58,0.06); overflow:hidden;}
   .menu-row{
@@ -179,12 +154,6 @@
         </button>
       </div>
 
-      <div class="level-badge">
-        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.9 6.3 6.9.6-5.2 4.6 1.6 6.7L12 16.9 5.8 20.2l1.6-6.7L2.2 8.9l6.9-.6z"/></svg>
-        <span id="levelText">Lv.1</span>
-      </div>
-      <div><span class="title-chip" id="titleChip">称号なし</span></div>
-
       <div class="stats-grid">
         <div class="stat"><div class="num" id="statFinds">0</div><div class="label">総発見数</div></div>
         <div class="stat"><div class="num" id="statCollected">0</div><div class="label">総回収数</div></div>
@@ -199,9 +168,6 @@
         <button class="bio-save" id="bioSaveBtn">保存する</button>
       </div>
     </div>
-
-    <div class="section-label">バッジ</div>
-    <div class="badge-row" id="badgeRow"></div>
 
     <div class="section-label">メニュー</div>
     <div class="menu-card">
@@ -270,11 +236,8 @@ const overlay        = document.getElementById('loadingOverlay');
 const avatarImg       = document.getElementById('avatarImg');
 const avatarFallback  = document.getElementById('avatarFallback');
 const displayNameEl   = document.getElementById('displayName');
-const levelTextEl     = document.getElementById('levelText');
-const titleChipEl     = document.getElementById('titleChip');
 const statFindsEl     = document.getElementById('statFinds');
 const statCollectedEl = document.getElementById('statCollected');
-const badgeRowEl      = document.getElementById('badgeRow');
 const editNameBtn     = document.getElementById('editNameBtn');
 const bioInput        = document.getElementById('bioInput');
 const bioCount        = document.getElementById('bioCount');
@@ -283,28 +246,8 @@ const logoutRow       = document.getElementById('logoutRow');
 const avatarEditBtn   = document.getElementById('avatarEditBtn');
 const avatarInput     = document.getElementById('avatarInput');
 
-/* バッジのマスターデータ。user.badges (id配列) に含まれていれば獲得済み表示にする。
-   実際のバッジ体系が決まったら内容を差し替えてください。 */
-const BADGE_MASTER = [
-  { id:'first_find',   emoji:'🌱', label:'はじめの一歩' },
-  { id:'coast_master', emoji:'🌊', label:'海岸マスター' },
-  { id:'week_streak',  emoji:'🔥', label:'7日連続' },
-  { id:'bulky_hunter', emoji:'🛋️', label:'大型ゴミ回収' },
-  { id:'top_ranker',   emoji:'🏆', label:'週間1位' }
-];
-
 function escapeHtml(str){
   return String(str).replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
-}
-
-function renderBadges(earnedIds){
-  const earned = new Set(earnedIds || []);
-  badgeRowEl.innerHTML = BADGE_MASTER.map(b => `
-    <div class="badge ${earned.has(b.id) ? '' : 'locked'}">
-      <div class="ico">${b.emoji}</div>
-      <span>${escapeHtml(b.label)}</span>
-    </div>
-  `).join('');
 }
 
 function renderProfile(data, user){
@@ -320,11 +263,6 @@ function renderProfile(data, user){
     avatarFallback.style.display = 'flex';
     avatarImg.style.display = 'none';
   }
-
-  levelTextEl.textContent = `Lv.${data.level || 1}`;
-  titleChipEl.textContent = data.title || '称号なし';
-
-  renderBadges(data.badges);
 
   bioInput.value = data.bio || '';
   bioCount.textContent = bioInput.value.length;

@@ -69,6 +69,50 @@
 
   main{flex:1; padding:16px 16px 90px;}
 
+  /* ---- スタンプラリー（バッジコレクション） ---- */
+  .stamp-card{
+    background:var(--card); border-radius:18px; padding:16px 16px 14px;
+    margin-bottom:16px; box-shadow:0 6px 16px rgba(44,78,58,0.07);
+  }
+  .stamp-card-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;}
+  .stamp-card-head h2{font-family:"Kiwi Maru", serif; font-weight:500; font-size:14.5px; color:var(--forest-deep); margin:0;}
+  .stamp-progress{font-size:12px; font-weight:900; color:var(--forest-deep); background:var(--forest-soft); padding:3px 10px; border-radius:999px;}
+
+  .stamp-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:9px;}
+  .stamp{
+    aspect-ratio:1/1; border-radius:14px; border:2px dashed var(--line);
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;
+    background:#FAF8F1; transition:transform .15s ease;
+  }
+  .stamp .ico{font-size:22px; filter:grayscale(1); opacity:.45;}
+  .stamp span{font-size:8.5px; color:var(--ink-soft); text-align:center; line-height:1.25; padding:0 2px;}
+  .stamp.earned{
+    border-style:solid; border-color:var(--gold);
+    background:linear-gradient(135deg,#FFF8E7,#FDEFC8);
+    transform:rotate(-2deg);
+  }
+  .stamp.earned:nth-child(even){transform:rotate(2deg);}
+  .stamp.earned .ico{filter:none; opacity:1;}
+  .stamp.earned span{color:#8A5B0A; font-weight:700;}
+
+  .claim-row{display:flex; gap:8px; margin-top:14px;}
+  .claim-btn{
+    flex:1; display:flex; flex-direction:column; align-items:center; gap:3px;
+    border:none; border-radius:14px; background:var(--forest-soft); color:var(--forest-deep);
+    font-size:11px; font-weight:700; padding:10px 4px; cursor:pointer; font-family:inherit;
+  }
+  .claim-btn .emoji{font-size:18px;}
+  .claim-btn:active{background:var(--forest); color:#fff;}
+
+  .stamp-toast{
+    position:fixed; left:50%; bottom:calc(env(safe-area-inset-bottom,0px) + 78px);
+    transform:translateX(-50%) translateY(20px); max-width:400px; width:calc(100% - 48px);
+    background:var(--forest-deep); color:#fff; font-size:12.5px; line-height:1.5;
+    padding:12px 16px; border-radius:14px; box-shadow:0 8px 20px rgba(0,0,0,0.25);
+    opacity:0; pointer-events:none; transition:opacity .25s ease, transform .25s ease; z-index:50; text-align:center;
+  }
+  .stamp-toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
+
   /* 履歴一覧：左から3列、3列埋まったら次の行へ（CSS Gridの標準の流れ順） */
   .history-list{display:grid; grid-template-columns:repeat(3, 1fr); gap:8px;}
 
@@ -277,6 +321,19 @@
   </header>
 
   <main>
+    <div class="stamp-card">
+      <div class="stamp-card-head">
+        <h2>スタンプラリー</h2>
+        <span class="stamp-progress" id="stampProgress">0 / 9</span>
+      </div>
+      <div class="stamp-grid" id="stampGrid"></div>
+      <div class="claim-row">
+        <button class="claim-btn" id="claimBadgeBtn"><span class="emoji">🏅</span>バッジ</button>
+        <button class="claim-btn" id="claimPointBtn"><span class="emoji">⭐</span>ポイント</button>
+        <button class="claim-btn" id="claimRewardBtn"><span class="emoji">🎁</span>お店の特典</button>
+      </div>
+    </div>
+
     <div class="history-list" id="historyList">
       <div class="skeleton-card"></div>
       <div class="skeleton-card"></div>
@@ -286,6 +343,8 @@
       <div class="skeleton-card"></div>
     </div>
   </main>
+
+  <div class="stamp-toast" id="stampToast"></div>
 
   <nav class="bottom">
     <a href="home.html">
@@ -433,6 +492,13 @@ const LOGIN_PAGE = "login.html";
 const overlay         = document.getElementById('loadingOverlay');
 const historyListEl   = document.getElementById('historyList');
 
+const stampGridEl     = document.getElementById('stampGrid');
+const stampProgressEl = document.getElementById('stampProgress');
+const stampToastEl    = document.getElementById('stampToast');
+const claimBadgeBtn   = document.getElementById('claimBadgeBtn');
+const claimPointBtn   = document.getElementById('claimPointBtn');
+const claimRewardBtn  = document.getElementById('claimRewardBtn');
+
 const editOverlay        = document.getElementById('editOverlay');
 const editCloseBtn        = document.getElementById('editCloseBtn');
 const editCancelBtn       = document.getElementById('editCancelBtn');
@@ -462,6 +528,26 @@ const CATEGORY_EMOJI = {
   '危険物':'⚠️', 'ビン':'🍾' /* 旧カテゴリ名（過去データ互換用） */
 };
 
+/* バッジのマスターデータ。users/{uid}.badges (id配列) に含まれていれば獲得済み扱い。
+   9個でスタンプラリーの台紙が埋まる構成。実際の獲得条件（自動判定）が決まったら
+   claimBadgeBtn の手動獲得ロジックを、各条件に応じた自動付与に置き換えてください。 */
+const BADGE_MASTER = [
+  { id:'first_find',      emoji:'🌱', label:'はじめの一歩' },
+  { id:'coast_master',    emoji:'🌊', label:'海岸マスター' },
+  { id:'week_streak',     emoji:'🔥', label:'7日連続' },
+  { id:'bulky_hunter',    emoji:'🛋️', label:'大型ゴミ回収' },
+  { id:'top_ranker',      emoji:'🏆', label:'週間1位' },
+  { id:'gourmet_finder',  emoji:'🍴', label:'グルメ発見' },
+  { id:'history_scholar', emoji:'🏯', label:'歴史通' },
+  { id:'photo_master',    emoji:'📸', label:'フォトマスター' },
+  { id:'town_complete',   emoji:'🗺️', label:'町めぐり達成' }
+];
+
+let earnedBadgeIds = new Set();
+let userPoints = 0;
+let rewardClaimed = false;
+let stampToastTimer = null;
+
 let currentUser = null;
 let myReports = [];
 let historyEntries = [];  // = myReports のコピー（並び替え済み）。自分の発見記録のみを表示する
@@ -487,6 +573,108 @@ function formatDate(ts){
   const hh = String(d.getHours()).padStart(2,'0'), mm = String(d.getMinutes()).padStart(2,'0');
   return `${y}/${m}/${day} ${hh}:${mm}`;
 }
+
+/* ---------------------------------------------------------------------
+   スタンプラリー（バッジコレクション）
+   台紙は9マス固定。タップ式の「獲得」ボタン3種（バッジ/ポイント/お店の特典）で、
+   実際にお店を歩き回るスタンプラリー・ウォークラリーのような手応えを出す。
+   --------------------------------------------------------------------- */
+function showStampToast(message){
+  stampToastEl.textContent = message;
+  stampToastEl.classList.add('show');
+  clearTimeout(stampToastTimer);
+  stampToastTimer = setTimeout(() => stampToastEl.classList.remove('show'), 2600);
+}
+
+function renderStamps(){
+  stampGridEl.innerHTML = BADGE_MASTER.map(b => `
+    <div class="stamp ${earnedBadgeIds.has(b.id) ? 'earned' : ''}">
+      <div class="ico">${b.emoji}</div>
+      <span>${escapeHtml(b.label)}</span>
+    </div>
+  `).join('');
+  stampProgressEl.textContent = `${earnedBadgeIds.size} / ${BADGE_MASTER.length}`;
+}
+
+async function loadStampData(uid){
+  try{
+    const snap = await db.collection('users').doc(uid).get();
+    const data = snap.exists ? snap.data() : {};
+    earnedBadgeIds = new Set(data.badges || []);
+    userPoints = data.points || 0;
+    rewardClaimed = !!data.rewardClaimed;
+  }catch(err){
+    console.error('スタンプラリー情報の取得に失敗しました', err);
+    earnedBadgeIds = new Set();
+    userPoints = 0;
+    rewardClaimed = false;
+  }
+  renderStamps();
+}
+
+claimBadgeBtn.addEventListener('click', async () => {
+  if(!currentUser) return;
+  const next = BADGE_MASTER.find(b => !earnedBadgeIds.has(b.id));
+  if(!next){
+    showStampToast('9個のバッジをすべて獲得済みです！');
+    return;
+  }
+  claimBadgeBtn.disabled = true;
+  try{
+    await db.collection('users').doc(currentUser.uid).set({
+      badges: firebase.firestore.FieldValue.arrayUnion(next.id)
+    }, { merge:true });
+    earnedBadgeIds.add(next.id);
+    renderStamps();
+    showStampToast(`${next.emoji} 「${next.label}」のバッジを獲得しました！`);
+  }catch(err){
+    console.error('バッジの獲得に失敗しました', err);
+    showStampToast('バッジの獲得に失敗しました。もう一度お試しください。');
+  }finally{
+    claimBadgeBtn.disabled = false;
+  }
+});
+
+claimPointBtn.addEventListener('click', async () => {
+  if(!currentUser) return;
+  const gain = 10;
+  claimPointBtn.disabled = true;
+  try{
+    await db.collection('users').doc(currentUser.uid).set({
+      points: firebase.firestore.FieldValue.increment(gain)
+    }, { merge:true });
+    userPoints += gain;
+    showStampToast(`⭐ ポイントを${gain}pt獲得しました（合計 ${userPoints}pt）`);
+  }catch(err){
+    console.error('ポイントの獲得に失敗しました', err);
+    showStampToast('ポイントの獲得に失敗しました。もう一度お試しください。');
+  }finally{
+    claimPointBtn.disabled = false;
+  }
+});
+
+claimRewardBtn.addEventListener('click', async () => {
+  if(!currentUser) return;
+  if(earnedBadgeIds.size < BADGE_MASTER.length){
+    showStampToast(`あと${BADGE_MASTER.length - earnedBadgeIds.size}個バッジを集めるとお店の特典と交換できます`);
+    return;
+  }
+  if(rewardClaimed){
+    showStampToast('お店の特典はすでに交換済みです');
+    return;
+  }
+  claimRewardBtn.disabled = true;
+  try{
+    await db.collection('users').doc(currentUser.uid).set({ rewardClaimed: true }, { merge:true });
+    rewardClaimed = true;
+    showStampToast('🎉 コンプリート！この画面をお店のスタッフに見せて特典と交換してください');
+  }catch(err){
+    console.error('特典の交換に失敗しました', err);
+    showStampToast('特典の交換に失敗しました。もう一度お試しください。');
+  }finally{
+    claimRewardBtn.disabled = false;
+  }
+});
 
 /* ---------------------------------------------------------------------
    履歴一覧の取得・描画（自分の発見記録＝reports のみを対象とする。
@@ -1035,6 +1223,7 @@ auth.onAuthStateChanged((user) => {
   overlay.style.opacity = '0';
   setTimeout(() => overlay.style.display = 'none', 350);
   loadHistory();
+  loadStampData(user.uid);
 });
 </script>
 </body>
