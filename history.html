@@ -800,66 +800,90 @@ editSaveBtn.addEventListener('click', async () => {
   editSaveBtn.disabled = true;
   editSaveBtn.textContent = '保存しています…';
 
+  const updateData = {
+    category: editCategory,
+    isBulky: !!editBulkyToggle.checked,
+    town: editTownInput.value.trim() || null,
+    memo: editMemoInput.value.trim()
+  };
+  if(typeof editLat === 'number' && typeof editLng === 'number'){
+    updateData.lat = editLat;
+    updateData.lng = editLng;
+  }
+
+  /* ---------------------------------------------------------------
+     ①本体の更新（reports）。これが編集保存の本質なので、失敗したら
+     ここで中断してエラー原因が分かる形で知らせる。
+     --------------------------------------------------------------- */
   try{
-    const updateData = {
-      category: editCategory,
-      isBulky: !!editBulkyToggle.checked,
-      town: editTownInput.value.trim() || null,
-      memo: editMemoInput.value.trim()
-    };
-    if(typeof editLat === 'number' && typeof editLng === 'number'){
-      updateData.lat = editLat;
-      updateData.lng = editLng;
-    }
-
     await db.collection('reports').doc(editingId).update(updateData);
+  }catch(err){
+    console.error('更新に失敗しました', err);
+    const code = err && err.code ? err.code : '';
+    const msg  = err && err.message ? err.message : String(err);
+    alert('更新に失敗しました。もう一度お試しください。\n[' + code + '] ' + msg);
+    editSaveBtn.disabled = false;
+    editSaveBtn.textContent = '保存する';
+    return;
+  }
 
-    // 写真の差し替え・削除
-    if(editPhotoDataUrl === null){
-      await db.collection('reportPhotos').doc(editingId).delete().catch(() => {});
-    } else if(typeof editPhotoDataUrl === 'string'){
+  /* ---------------------------------------------------------------
+     ②写真の差し替え・削除、③回収数の増減調整は付随処理。
+     ①が既に成功しているので、ここで失敗しても編集自体は
+     成功として扱う（コンソールに警告だけ残す）。
+     --------------------------------------------------------------- */
+  if(editPhotoDataUrl === null){
+    try{
+      await db.collection('reportPhotos').doc(editingId).delete();
+    }catch(err){
+      console.warn('写真の削除に失敗しました（本体の更新は完了済み）', err);
+    }
+  } else if(typeof editPhotoDataUrl === 'string'){
+    try{
       await db.collection('reportPhotos').doc(editingId).set({
         imageBase64: editPhotoDataUrl,
         uid: currentUser.uid,
         createdAt: firebase.firestore.FieldValue.serverTimestamp()
       });
+    }catch(err){
+      console.warn('写真の保存に失敗しました（本体の更新は完了済み）', err);
     }
+  }
 
-    // 回収フラグが変化した場合のみ totalCollected を調整する
-    const wasBulky = !!r.isBulky;
-    const nowBulky = !!editBulkyToggle.checked;
-    if(wasBulky !== nowBulky){
+  // 回収フラグが変化した場合のみ totalCollected を調整する
+  const wasBulky = !!r.isBulky;
+  const nowBulky = !!editBulkyToggle.checked;
+  if(wasBulky !== nowBulky){
+    try{
       await db.collection('users').doc(currentUser.uid).set({
         totalCollected: firebase.firestore.FieldValue.increment(nowBulky ? 1 : -1)
       }, { merge: true });
+    }catch(err){
+      console.warn('回収数の調整に失敗しました（本体の更新は完了済み）', err);
     }
-
-    // ローカルの一覧データも更新して再描画
-    Object.assign(r, updateData);
-    const idx = myReports.findIndex(x => x.id === editingId);
-    const rowEl = historyListEl.querySelector(`.history-row[data-id="${CSS.escape(editingId)}"]`);
-    if(rowEl){
-      rowEl.outerHTML = renderRow(r);
-      if(editPhotoDataUrl !== undefined){
-        const wrap = document.getElementById('thumb-' + r.id);
-        if(wrap){
-          wrap.innerHTML = (typeof editPhotoDataUrl === 'string')
-            ? `<img src="${editPhotoDataUrl}" alt="">`
-            : `<div class="thumb-icon">${CATEGORY_EMOJI[r.category] || '🗑️'}</div>`;
-        }
-      } else {
-        loadThumbnails();
-      }
-    }
-
-    closeEditModal();
-  }catch(err){
-    console.error('更新に失敗しました', err);
-    alert('更新に失敗しました。もう一度お試しください。');
-  }finally{
-    editSaveBtn.disabled = false;
-    editSaveBtn.textContent = '保存する';
   }
+
+  // ローカルの一覧データも更新して再描画
+  Object.assign(r, updateData);
+  const idx = myReports.findIndex(x => x.id === editingId);
+  const rowEl = historyListEl.querySelector(`.history-row[data-id="${CSS.escape(editingId)}"]`);
+  if(rowEl){
+    rowEl.outerHTML = renderRow(r);
+    if(editPhotoDataUrl !== undefined){
+      const wrap = document.getElementById('thumb-' + r.id);
+      if(wrap){
+        wrap.innerHTML = (typeof editPhotoDataUrl === 'string')
+          ? `<img src="${editPhotoDataUrl}" alt="">`
+          : `<div class="thumb-icon">${CATEGORY_EMOJI[r.category] || '🗑️'}</div>`;
+      }
+    } else {
+      loadThumbnails();
+    }
+  }
+
+  closeEditModal();
+  editSaveBtn.disabled = false;
+  editSaveBtn.textContent = '保存する';
 });
 
 /* ---------------------------------------------------------------------

@@ -74,7 +74,7 @@
     color:var(--forest-deep); background:var(--forest-soft); padding:4px 12px; border-radius:999px;
   }
 
-  .stats-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:0; margin-top:18px; border-top:1px solid var(--line); padding-top:16px;}
+  .stats-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:0; margin-top:18px; border-top:1px solid var(--line); padding-top:16px;}
   .stats-grid .stat{text-align:center;}
   .stats-grid .stat + .stat{border-left:1px solid var(--line);}
   .stats-grid .num{font-family:"Kiwi Maru", serif; font-size:20px; color:var(--forest-deep); line-height:1;}
@@ -188,7 +188,6 @@
       <div class="stats-grid">
         <div class="stat"><div class="num" id="statFinds">0</div><div class="label">総発見数</div></div>
         <div class="stat"><div class="num" id="statCollected">0</div><div class="label">総回収数</div></div>
-        <div class="stat"><div class="num" id="statCO2">0kg</div><div class="label">CO2削減量</div></div>
       </div>
     </div>
 
@@ -269,7 +268,6 @@ const levelTextEl     = document.getElementById('levelText');
 const titleChipEl     = document.getElementById('titleChip');
 const statFindsEl     = document.getElementById('statFinds');
 const statCollectedEl = document.getElementById('statCollected');
-const statCO2El       = document.getElementById('statCO2');
 const badgeRowEl      = document.getElementById('badgeRow');
 const editNameBtn     = document.getElementById('editNameBtn');
 const bioInput        = document.getElementById('bioInput');
@@ -350,15 +348,10 @@ async function renderStatsFromReports(uid){
 
     statFindsEl.textContent = totalFinds.toLocaleString();
     statCollectedEl.textContent = totalCollected.toLocaleString();
-
-    /* CO2削減量は仮の概算式（1個あたり約0.02kg換算）。
-       実際の算出ロジックが決まったら差し替えてください。 */
-    statCO2El.textContent = `${(totalFinds * 0.02).toFixed(1)}kg`;
   }catch(err){
     console.error('発見統計の集計に失敗しました', err);
     statFindsEl.textContent = '—';
     statCollectedEl.textContent = '—';
-    statCO2El.textContent = '—';
   }
 }
 
