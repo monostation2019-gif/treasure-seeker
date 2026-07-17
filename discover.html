@@ -41,7 +41,7 @@
   header h1{font-family:"Kiwi Maru", serif; font-weight:500; font-size:18px; margin:0;}
   header p{font-size:12px; color:#D8E7DC; margin:4px 0 0;}
 
-  main{flex:1; padding:18px 18px 110px;}
+  main{flex:1; padding:18px 18px 100px;}
 
   .card{
     background:var(--card); border-radius:18px; padding:16px;
@@ -60,6 +60,11 @@
   }
   .cat-btn .emoji{font-size:20px;}
   .cat-btn.active{border-color:var(--forest); background:var(--forest-soft); color:var(--forest-deep); font-weight:700;}
+  .cat-divider{
+    grid-column:1 / -1; display:flex; align-items:center; gap:8px;
+    font-size:10.5px; color:var(--ink-soft); font-weight:700; margin:2px 0 -2px;
+  }
+  .cat-divider::before, .cat-divider::after{content:""; flex:1; height:1px; background:var(--line);}
 
   /* 大型ゴミトグル */
   .toggle-row{display:flex; align-items:center; justify-content:space-between;}
@@ -124,13 +129,8 @@
   textarea:focus, input[type=text]:focus{outline:none; border-color:var(--forest);}
   .char-count{text-align:right; font-size:10.5px; color:var(--ink-soft); margin-top:4px;}
 
-  /* 送信 */
-  .submit-bar{
-    position:fixed; left:50%; transform:translateX(-50%); bottom:0;
-    width:100%; max-width:480px; background:var(--card);
-    border-top:1px solid var(--line); padding:12px 18px calc(env(safe-area-inset-bottom,0px) + 12px);
-    z-index:1010;
-  }
+  /* 送信（フォーム内に配置。フォームの一番下＝メモの下に表示） */
+  .submit-bar{ margin-top:4px; }
   .submit-btn{
     width:100%; padding:14px; border:none; border-radius:14px;
     background:var(--torii); color:#fff; font-size:15px; font-weight:700;
@@ -214,11 +214,15 @@
           <div class="cat-btn" data-cat="たばこ吸い殻"><span class="emoji">🚬</span>たばこ吸い殻</div>
           <div class="cat-btn" data-cat="空き缶"><span class="emoji">🥫</span>空き缶</div>
           <div class="cat-btn" data-cat="プラスチック"><span class="emoji">♻️</span>プラスチック</div>
-          <div class="cat-btn" data-cat="危険物"><span class="emoji">⚠️</span>危険物</div>
-          <div class="cat-btn" data-cat="ビン"><span class="emoji">🍾</span>ビン</div>
+          <div class="cat-btn" data-cat="ビン・ガラス"><span class="emoji">🍾</span>ビン・ガラス</div>
           <div class="cat-btn" data-cat="紙類"><span class="emoji">📄</span>紙類</div>
           <div class="cat-btn" data-cat="大型ゴミ"><span class="emoji">🛋️</span>大型ゴミ</div>
           <div class="cat-btn" data-cat="その他"><span class="emoji">🗑️</span>その他</div>
+          <div class="cat-btn" data-cat="危険"><span class="emoji">⚠️</span>危険</div>
+          <div class="cat-divider">まちの発見</div>
+          <div class="cat-btn" data-cat="グルメ"><span class="emoji">🍴</span>グルメ</div>
+          <div class="cat-btn" data-cat="歴史・文化"><span class="emoji">🏯</span>歴史・文化</div>
+          <div class="cat-btn" data-cat="おすすめ"><span class="emoji">⭐</span>おすすめ</div>
         </div>
       </div>
 
@@ -285,15 +289,15 @@
         <div class="char-count"><span id="memoCount">0</span>/140</div>
       </div>
 
+      <div class="submit-bar">
+        <button class="submit-btn" id="submitBtn" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+          この発見を記録する
+        </button>
+      </div>
+
     </form>
   </main>
-
-  <div class="submit-bar">
-    <button class="submit-btn" id="submitBtn" type="button">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
-      この発見を記録する
-    </button>
-  </div>
 
   <div class="done-overlay" id="doneOverlay">
     <div class="done-card">

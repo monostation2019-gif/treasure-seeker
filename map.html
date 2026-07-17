@@ -53,6 +53,7 @@
   }
   .chip svg{width:13px; height:13px;}
   .chip.active{background:#fff; color:var(--forest-deep); border-color:#fff;}
+  .chip-divider{flex-shrink:0; width:1px; align-self:stretch; background:rgba(255,255,255,0.3); margin:2px 0;}
 
   .map-wrap{flex:1; position:relative;}
   #map{position:absolute; inset:0;}
@@ -203,10 +204,15 @@
       <div class="chip" data-cat="たばこ吸い殻">🚬 たばこ吸い殻</div>
       <div class="chip" data-cat="空き缶">🥫 空き缶</div>
       <div class="chip" data-cat="プラスチック">♻️ プラスチック</div>
-      <div class="chip" data-cat="危険物">⚠️ 危険物</div>
-      <div class="chip" data-cat="ビン">🍾 ビン</div>
+      <div class="chip" data-cat="ビン・ガラス">🍾 ビン・ガラス</div>
       <div class="chip" data-cat="紙類">📄 紙類</div>
       <div class="chip" data-cat="大型ゴミ">🛋️ 大型ゴミ</div>
+      <div class="chip" data-cat="その他">🗑️ その他</div>
+      <div class="chip" data-cat="危険">⚠️ 危険</div>
+      <div class="chip-divider"></div>
+      <div class="chip" data-cat="グルメ">🍴 グルメ</div>
+      <div class="chip" data-cat="歴史・文化">🏯 歴史・文化</div>
+      <div class="chip" data-cat="おすすめ">⭐ おすすめ</div>
     </div>
   </header>
 

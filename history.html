@@ -29,8 +29,9 @@
 
   header{
     background:linear-gradient(155deg, var(--forest) 0%, var(--forest-deep) 100%);
-    padding:calc(env(safe-area-inset-top,0px) + 16px) 18px 16px;
+    padding:calc(env(safe-area-inset-top,0px) + 16px) 18px 14px;
     color:#fff; border-radius:0 0 22px 22px;
+    display:flex; flex-direction:column; gap:12px;
   }
   .header-top{display:flex; align-items:center; gap:10px;}
   .back-btn{
@@ -42,48 +43,82 @@
   .back-btn svg{width:16px; height:16px;}
   header h1{font-family:"Kiwi Maru", serif; font-weight:500; font-size:18px; margin:0;}
 
-  main{flex:1; padding:16px 16px 30px;}
-
-  .history-list{display:flex; flex-direction:column; gap:10px;}
-
-  .history-row{
-    display:flex; align-items:flex-start; gap:12px;
-    background:var(--card); border-radius:16px; padding:12px;
-    box-shadow:0 6px 16px rgba(44,78,58,0.06); cursor:pointer;
+  /* 種類別 横スクロールフィルター */
+  .chips{display:flex; gap:8px; overflow-x:auto; padding-bottom:2px; scrollbar-width:none;}
+  .chips::-webkit-scrollbar{display:none;}
+  .chip{
+    flex-shrink:0; display:flex; align-items:center; gap:5px;
+    background:rgba(255,255,255,0.14); border:1px solid rgba(255,255,255,0.32);
+    color:#fff; font-size:12px; font-weight:700;
+    padding:7px 12px; border-radius:999px; cursor:pointer;
+    transition:background .15s ease;
   }
-  .thumb-wrap{
-    width:56px; height:56px; border-radius:12px; flex-shrink:0; overflow:hidden;
-    background:var(--forest-soft); display:flex; align-items:center; justify-content:center;
-  }
-  .thumb-wrap img{width:100%; height:100%; object-fit:cover;}
-  .thumb-icon{font-size:24px;}
+  .chip.active{background:#fff; color:var(--forest-deep); border-color:#fff;}
+  .chip-divider{flex-shrink:0; width:1px; align-self:stretch; background:rgba(255,255,255,0.3); margin:2px 0;}
 
-  .history-main{flex:1; min-width:0;}
-  .history-top{display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-bottom:3px;}
-  .type-badge{font-size:10.5px; font-weight:900; padding:2px 9px; border-radius:999px; flex-shrink:0;}
-  .type-badge.found{background:var(--forest-soft); color:var(--forest-deep);}
-  .type-badge.collected{background:#FCEFE3; color:var(--torii);}
-  .history-cat{font-size:13.5px; font-weight:700; color:var(--ink);}
-  .history-sub{
-    font-size:12px; color:var(--ink-soft); line-height:1.5;
-    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
+  /* 発見/未回収/回収 ステータスタブ */
+  .status-tabs{
+    display:flex; gap:4px; background:rgba(255,255,255,0.14);
+    border:1px solid rgba(255,255,255,0.28); border-radius:12px; padding:3px;
   }
-  .history-date{font-size:11px; color:var(--ink-soft); margin-top:4px;}
+  .status-tab{
+    flex:1; text-align:center; font-size:12.5px; font-weight:700; color:rgba(255,255,255,0.85);
+    padding:7px 4px; border-radius:9px; cursor:pointer; transition:background .15s ease, color .15s ease;
+  }
+  .status-tab.active{background:#fff; color:var(--forest-deep);}
 
-  .history-actions{display:flex; flex-direction:column; gap:6px; flex-shrink:0;}
-  .icon-btn{
-    width:30px; height:30px; border-radius:9px; border:none; cursor:pointer;
-    background:var(--forest-soft); color:var(--forest-deep);
+  main{flex:1; padding:16px 16px 90px;}
+
+  /* 履歴一覧：左から3列、3列埋まったら次の行へ（CSS Gridの標準の流れ順） */
+  .history-list{display:grid; grid-template-columns:repeat(3, 1fr); gap:8px;}
+
+  .history-card{
+    position:relative; aspect-ratio:1/1; border-radius:14px; overflow:hidden;
+    background:var(--forest-soft); cursor:pointer;
+    box-shadow:0 4px 10px rgba(44,78,58,0.08);
+  }
+  .history-card .thumb-wrap{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    background:var(--forest-soft);
+  }
+  .history-card .thumb-wrap img{width:100%; height:100%; object-fit:cover;}
+  .thumb-icon{font-size:26px;}
+
+  /* 下部：カテゴリ・日付のグラデーションオーバーレイ */
+  .card-info{
+    position:absolute; left:0; right:0; bottom:0;
+    padding:16px 7px 6px; color:#fff;
+    background:linear-gradient(to top, rgba(20,28,20,0.72) 0%, rgba(20,28,20,0.0) 100%);
+  }
+  .card-cat{
+    font-size:10.5px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    display:flex; align-items:center; gap:3px;
+  }
+  .card-date{font-size:8.5px; color:rgba(255,255,255,0.85); margin-top:1px;}
+
+  /* 右上：回収済みバッジ（〇で囲んだ「済」） */
+  .card-done-badge{
+    position:absolute; top:6px; right:6px; width:24px; height:24px; border-radius:50%;
+    background:var(--torii); color:#fff; font-size:10.5px; font-weight:900;
     display:flex; align-items:center; justify-content:center;
+    box-shadow:0 2px 6px rgba(0,0,0,0.25); border:1.5px solid #fff;
   }
-  .icon-btn svg{width:14px; height:14px;}
-  .icon-btn.delete-btn{background:#FCEFE3; color:var(--torii);}
 
-  .skeleton-row{display:flex; align-items:center; gap:12px; padding:12px; background:var(--card); border-radius:16px;}
-  .sk{background:linear-gradient(90deg,#EFEBDF 25%,#F6F3E9 37%,#EFEBDF 63%); background-size:400% 100%; animation:sk 1.4s ease infinite; border-radius:8px;}
+  /* 左上：編集・削除の小さいアイコンボタン（自分の発見記録のみ表示） */
+  .card-actions{position:absolute; top:6px; left:6px; display:flex; gap:4px;}
+  .icon-btn{
+    width:22px; height:22px; border-radius:50%; border:none; cursor:pointer;
+    background:rgba(255,255,255,0.85); color:var(--forest-deep);
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:0 2px 5px rgba(0,0,0,0.15);
+  }
+  .icon-btn svg{width:11px; height:11px;}
+  .icon-btn.delete-btn{background:rgba(255,255,255,0.85); color:var(--torii);}
+
+  .skeleton-card{aspect-ratio:1/1; border-radius:14px; background:linear-gradient(90deg,#EFEBDF 25%,#F6F3E9 37%,#EFEBDF 63%); background-size:400% 100%; animation:sk 1.4s ease infinite;}
   @keyframes sk{0%{background-position:100% 50%;}100%{background-position:0 50%;}}
 
-  .history-empty{text-align:center; padding:50px 14px; color:var(--ink-soft); font-size:13px; line-height:1.7;}
+  .history-empty{grid-column:1 / -1; text-align:center; padding:50px 14px; color:var(--ink-soft); font-size:13px; line-height:1.7;}
   .history-empty svg{width:30px; height:30px; margin-bottom:10px; color:var(--line);}
 
   nav.bottom{
@@ -133,6 +168,11 @@
   }
   .cat-btn .emoji{font-size:18px;}
   .cat-btn.active{border-color:var(--forest); background:var(--forest-soft); color:var(--forest-deep); font-weight:700;}
+  .cat-divider{
+    grid-column:1 / -1; display:flex; align-items:center; gap:8px;
+    font-size:10px; color:var(--ink-soft); font-weight:700; margin:2px 0 -2px;
+  }
+  .cat-divider::before, .cat-divider::after{content:""; flex:1; height:1px; background:var(--line);}
 
   .toggle-row{display:flex; align-items:center; justify-content:space-between;}
   .toggle-text{font-size:13px;}
@@ -213,13 +253,37 @@
       </a>
       <h1>発見・回収履歴</h1>
     </div>
+    <div class="chips" id="historyCategoryChips">
+      <div class="chip active" data-cat="all">すべて</div>
+      <div class="chip" data-cat="ペットボトル">💧 ペットボトル</div>
+      <div class="chip" data-cat="たばこ吸い殻">🚬 たばこ吸い殻</div>
+      <div class="chip" data-cat="空き缶">🥫 空き缶</div>
+      <div class="chip" data-cat="プラスチック">♻️ プラスチック</div>
+      <div class="chip" data-cat="ビン・ガラス">🍾 ビン・ガラス</div>
+      <div class="chip" data-cat="紙類">📄 紙類</div>
+      <div class="chip" data-cat="大型ゴミ">🛋️ 大型ゴミ</div>
+      <div class="chip" data-cat="その他">🗑️ その他</div>
+      <div class="chip" data-cat="危険">⚠️ 危険</div>
+      <div class="chip-divider"></div>
+      <div class="chip" data-cat="グルメ">🍴 グルメ</div>
+      <div class="chip" data-cat="歴史・文化">🏯 歴史・文化</div>
+      <div class="chip" data-cat="おすすめ">⭐ おすすめ</div>
+    </div>
+    <div class="status-tabs" id="statusTabs">
+      <div class="status-tab active" data-status="all">発見</div>
+      <div class="status-tab" data-status="uncollected">未回収</div>
+      <div class="status-tab" data-status="collected">回収</div>
+    </div>
   </header>
 
   <main>
     <div class="history-list" id="historyList">
-      <div class="skeleton-row"><div class="sk" style="width:56px;height:56px;border-radius:12px;"></div><div class="sk" style="flex:1;height:14px;"></div></div>
-      <div class="skeleton-row"><div class="sk" style="width:56px;height:56px;border-radius:12px;"></div><div class="sk" style="flex:1;height:14px;"></div></div>
-      <div class="skeleton-row"><div class="sk" style="width:56px;height:56px;border-radius:12px;"></div><div class="sk" style="flex:1;height:14px;"></div></div>
+      <div class="skeleton-card"></div>
+      <div class="skeleton-card"></div>
+      <div class="skeleton-card"></div>
+      <div class="skeleton-card"></div>
+      <div class="skeleton-card"></div>
+      <div class="skeleton-card"></div>
     </div>
   </main>
 
@@ -261,11 +325,15 @@
           <div class="cat-btn" data-cat="たばこ吸い殻"><span class="emoji">🚬</span>たばこ吸い殻</div>
           <div class="cat-btn" data-cat="空き缶"><span class="emoji">🥫</span>空き缶</div>
           <div class="cat-btn" data-cat="プラスチック"><span class="emoji">♻️</span>プラスチック</div>
-          <div class="cat-btn" data-cat="危険物"><span class="emoji">⚠️</span>危険物</div>
-          <div class="cat-btn" data-cat="ビン"><span class="emoji">🍾</span>ビン</div>
+          <div class="cat-btn" data-cat="ビン・ガラス"><span class="emoji">🍾</span>ビン・ガラス</div>
           <div class="cat-btn" data-cat="紙類"><span class="emoji">📄</span>紙類</div>
           <div class="cat-btn" data-cat="大型ゴミ"><span class="emoji">🛋️</span>大型ゴミ</div>
           <div class="cat-btn" data-cat="その他"><span class="emoji">🗑️</span>その他</div>
+          <div class="cat-btn" data-cat="危険"><span class="emoji">⚠️</span>危険</div>
+          <div class="cat-divider">まちの発見</div>
+          <div class="cat-btn" data-cat="グルメ"><span class="emoji">🍴</span>グルメ</div>
+          <div class="cat-btn" data-cat="歴史・文化"><span class="emoji">🏯</span>歴史・文化</div>
+          <div class="cat-btn" data-cat="おすすめ"><span class="emoji">⭐</span>おすすめ</div>
         </div>
       </div>
 
@@ -385,18 +453,20 @@ const deleteConfirmOverlay = document.getElementById('deleteConfirmOverlay');
 const deleteCancelBtn      = document.getElementById('deleteCancelBtn');
 const deleteOkBtn          = document.getElementById('deleteOkBtn');
 let pendingDeleteId = null;
-let pendingDeleteKind = 'report';
 
 /* 種類ごとの絵文字（発見する / クリーンマップと同じマスター） */
 const CATEGORY_EMOJI = {
   'ペットボトル':'💧', 'たばこ吸い殻':'🚬', '空き缶':'🥫', 'プラスチック':'♻️',
-  '危険物':'⚠️', 'ビン':'🍾', '紙類':'📄', '大型ゴミ':'🛋️', 'その他':'🗑️'
+  '危険':'⚠️', 'ビン・ガラス':'🍾', '紙類':'📄', '大型ゴミ':'🛋️', 'その他':'🗑️',
+  'グルメ':'🍴', '歴史・文化':'🏯', 'おすすめ':'⭐',
+  '危険物':'⚠️', 'ビン':'🍾' /* 旧カテゴリ名（過去データ互換用） */
 };
 
 let currentUser = null;
 let myReports = [];
-let myCollections = [];  // 他ユーザーが見つけたゴミを、自分が回収した記録（collections コレクション）
-let historyEntries = [];  // myReports + myCollections をまとめて日時順に並べたもの
+let historyEntries = [];  // = myReports のコピー（並び替え済み）。自分の発見記録のみを表示する
+let activeCategory = 'all';   // 種類別フィルター（ヘッダーのchips）
+let activeStatus = 'all';     // ステータスフィルター（発見=all / 未回収=uncollected / 回収=collected）
 
 // 編集中の状態
 let editingId = null;
@@ -419,39 +489,25 @@ function formatDate(ts){
 }
 
 /* ---------------------------------------------------------------------
-   履歴一覧の取得・描画
+   履歴一覧の取得・描画（自分の発見記録＝reports のみを対象とする。
+   他ユーザーが見つけたゴミを回収した記録＝collections はこのページでは扱わない）
    --------------------------------------------------------------------- */
 async function loadHistory(){
   // uid の等価条件のみで取得する（orderByを併用すると複合インデックスが必要になり、
   // 未作成の場合はクエリが失敗して一覧が反映されない原因になるため、並び替えは
   // クライアント側で行う）。
-  // allSettled にしているのは、片方のクエリ（例：collectionsコレクションの
-  // ルール未整備）だけが失敗した場合に、成功しているもう片方まで消してしまわない
-  // ようにするため。
-  const [reportsResult, collectionsResult] = await Promise.allSettled([
-    db.collection('reports').where('uid', '==', currentUser.uid).limit(200).get(),
-    db.collection('collections').where('collectorUid', '==', currentUser.uid).limit(200).get()
-  ]);
-
   let hadPermissionError = false;
 
-  if(reportsResult.status === 'fulfilled'){
-    myReports = reportsResult.value.docs.map(doc => ({ id: doc.id, ...doc.data(), _kind: 'report' }));
-  } else {
-    console.error('発見記録の取得に失敗しました', reportsResult.reason);
-    if(reportsResult.reason && reportsResult.reason.code === 'permission-denied') hadPermissionError = true;
+  try{
+    const snap = await db.collection('reports').where('uid', '==', currentUser.uid).limit(200).get();
+    myReports = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  } catch(err){
+    console.error('発見記録の取得に失敗しました', err);
+    if(err && err.code === 'permission-denied') hadPermissionError = true;
     myReports = [];
   }
 
-  if(collectionsResult.status === 'fulfilled'){
-    myCollections = collectionsResult.value.docs.map(doc => ({ id: doc.id, ...doc.data(), _kind: 'collection' }));
-  } else {
-    console.error('回収記録の取得に失敗しました', collectionsResult.reason);
-    if(collectionsResult.reason && collectionsResult.reason.code === 'permission-denied') hadPermissionError = true;
-    myCollections = [];
-  }
-
-  historyEntries = [...myReports, ...myCollections];
+  historyEntries = [...myReports];
   historyEntries.sort((a, b) => {
     const at = a.createdAt && a.createdAt.toMillis ? a.createdAt.toMillis() : 0;
     const bt = b.createdAt && b.createdAt.toMillis ? b.createdAt.toMillis() : 0;
@@ -470,67 +526,108 @@ async function loadHistory(){
   renderHistoryList();
 }
 
+/* エントリが「回収済み」かどうかを判定する
+   ・r.collected  … 他ユーザーがマップ上でこの発見物を回収した場合に true になる
+   ・r.isBulky    … 自分自身が「回収した」として記録した場合に true になる
+   どちらか一方でも true なら回収済み扱いにする */
+function isEntryCollected(r){
+  return !!r.collected || !!r.isBulky;
+}
+
+/* 種類別chips × ステータスタブ の両方を満たすものだけに絞り込む */
+function getFilteredEntries(){
+  return historyEntries.filter(r => {
+    if(activeCategory !== 'all' && r.category !== activeCategory) return false;
+    if(activeStatus === 'uncollected' && isEntryCollected(r)) return false;
+    if(activeStatus === 'collected' && !isEntryCollected(r)) return false;
+    return true;
+  });
+}
+
+function formatDateShort(ts){
+  if(!ts || !ts.toDate) return '';
+  const d = ts.toDate();
+  return `${d.getMonth()+1}/${d.getDate()}`;
+}
+
 /* 一覧全体の再描画（空状態も含めて一元管理する） */
 function renderHistoryList(){
+  const filtered = getFilteredEntries();
   if(historyEntries.length === 0){
     historyListEl.innerHTML = `
       <div class="history-empty">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 9v4M12 17h.01"/><circle cx="12" cy="12" r="9"/></svg>
-        まだ発見・回収の記録がありません
+        まだ発見の記録がありません
       </div>`;
     return;
   }
-  historyListEl.innerHTML = historyEntries.map(renderRow).join('');
+  if(filtered.length === 0){
+    historyListEl.innerHTML = `
+      <div class="history-empty">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 9v4M12 17h.01"/><circle cx="12" cy="12" r="9"/></svg>
+        条件に合う記録がありません
+      </div>`;
+    return;
+  }
+  historyListEl.innerHTML = filtered.map(renderRow).join('');
   loadThumbnails();
 }
 
 function renderRow(r){
   const emoji = CATEGORY_EMOJI[r.category] || '🗑️';
-  const isCollection = r._kind === 'collection';
-  // collection（他ユーザーが見つけたゴミを自分が回収した記録）は常に「回収」バッジ。
-  // report（自分の発見記録）は、大型ゴミ回収トグル(isBulky)の状態で「発見」/「回収」を出し分ける。
-  const isCollected = isCollection || !!r.isBulky;
-  const subParts = [];
-  if(r.town) subParts.push(escapeHtml(r.town));
-  if(r.memo) subParts.push(escapeHtml(r.memo));
+  const isCollected = isEntryCollected(r);
 
-  // 地図へジャンプする際は、必ず元のゴミ報告(reports)の地点・IDを使う
-  const jumpId = isCollection ? (r.reportId || '') : r.id;
-
-  const actionsHtml = isCollection
-    ? `<button class="icon-btn delete-btn" data-id="${r.id}" data-kind="collection" title="回収記録を取り消す">
-         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/></svg>
-       </button>`
-    : `<button class="icon-btn edit-btn" data-id="${r.id}" title="編集">
+  const actionsHtml = `<button class="icon-btn edit-btn" data-id="${r.id}" title="編集">
          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
        </button>
-       <button class="icon-btn delete-btn" data-id="${r.id}" data-kind="report" title="削除">
+       <button class="icon-btn delete-btn" data-id="${r.id}" title="削除">
          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/></svg>
        </button>`;
 
+  // 回収済みなら〇で囲んだ「済」バッジを右上に表示
+  // （r.collected＝他ユーザーがマップ上で回収した／r.isBulky＝自分が回収済みとして記録した、のどちらでも表示）
+  const doneBadgeHtml = isCollected
+    ? `<div class="card-done-badge" title="${r.collected && !r.isBulky ? '他のユーザーが回収済み' : '回収済み'}">済</div>`
+    : '';
+
   return `
-    <div class="history-row" data-id="${r.id}" data-kind="${r._kind}" data-jump-id="${jumpId}" data-lat="${r.lat ?? ''}" data-lng="${r.lng ?? ''}">
+    <div class="history-card" data-id="${r.id}" data-lat="${r.lat ?? ''}" data-lng="${r.lng ?? ''}">
       <div class="thumb-wrap" id="thumb-${r.id}"><div class="thumb-icon">${emoji}</div></div>
-      <div class="history-main">
-        <div class="history-top">
-          <span class="type-badge ${isCollected ? 'collected' : 'found'}">${isCollected ? '回収' : '発見'}</span>
-          <span class="history-cat">${escapeHtml(r.category || 'その他')}</span>
-        </div>
-        <div class="history-sub">${subParts.join(' ・ ') || '&nbsp;'}</div>
-        <div class="history-date">${formatDate(r.createdAt)}</div>
-      </div>
-      <div class="history-actions">
+      ${doneBadgeHtml}
+      <div class="card-actions">
         ${actionsHtml}
+      </div>
+      <div class="card-info">
+        <div class="card-cat">${emoji} ${escapeHtml(r.category || 'その他')}</div>
+        <div class="card-date">${formatDateShort(r.createdAt)}</div>
       </div>
     </div>`;
 }
 
-/* 写真は reportPhotos / collectionPhotos コレクションに分離されているため、
-   一覧表示後に個別取得する（発見記録は reportPhotos、回収記録は collectionPhotos）。 */
+/* 種類別chipsのクリック */
+document.getElementById('historyCategoryChips').addEventListener('click', (e) => {
+  const chip = e.target.closest('.chip');
+  if(!chip) return;
+  document.querySelectorAll('#historyCategoryChips .chip').forEach(c => c.classList.remove('active'));
+  chip.classList.add('active');
+  activeCategory = chip.dataset.cat;
+  renderHistoryList();
+});
+
+/* 発見 / 未回収 / 回収 ステータスタブのクリック */
+document.getElementById('statusTabs').addEventListener('click', (e) => {
+  const tab = e.target.closest('.status-tab');
+  if(!tab) return;
+  document.querySelectorAll('#statusTabs .status-tab').forEach(t => t.classList.remove('active'));
+  tab.classList.add('active');
+  activeStatus = tab.dataset.status;
+  renderHistoryList();
+});
+
+/* 写真は reportPhotos コレクションに分離されているため、一覧表示後に個別取得する。 */
 function loadThumbnails(){
   historyEntries.forEach(r => {
-    const photoCollection = r._kind === 'collection' ? 'collectionPhotos' : 'reportPhotos';
-    db.collection(photoCollection).doc(r.id).get().then(doc => {
+    db.collection('reportPhotos').doc(r.id).get().then(doc => {
       if(doc.exists && doc.data().imageBase64){
         const wrap = document.getElementById('thumb-' + r.id);
         if(wrap){ wrap.innerHTML = `<img src="${doc.data().imageBase64}" alt="">`; }
@@ -547,13 +644,13 @@ historyListEl.addEventListener('click', (e) => {
   if(editBtn){ openEditModal(editBtn.dataset.id); return; }
 
   const deleteBtn = e.target.closest('.delete-btn');
-  if(deleteBtn){ openDeleteConfirm(deleteBtn.dataset.id, deleteBtn.dataset.kind); return; }
+  if(deleteBtn){ openDeleteConfirm(deleteBtn.dataset.id); return; }
 
-  const row = e.target.closest('.history-row');
+  const row = e.target.closest('.history-card');
   if(row){
     const lat = parseFloat(row.dataset.lat), lng = parseFloat(row.dataset.lng);
     if(!Number.isNaN(lat) && !Number.isNaN(lng)){
-      window.location.href = `map.html?lat=${lat}&lng=${lng}&id=${encodeURIComponent(row.dataset.jumpId || row.dataset.id)}`;
+      window.location.href = `map.html?lat=${lat}&lng=${lng}&id=${encodeURIComponent(row.dataset.id)}`;
     }
   }
 });
@@ -563,9 +660,8 @@ historyListEl.addEventListener('click', (e) => {
    （ブラウザ標準の confirm() は端末・PWA表示モードによっては表示されず、
    タップしても何も起きないように見えるケースがあるため自前で実装する）
    --------------------------------------------------------------------- */
-function openDeleteConfirm(id, kind){
+function openDeleteConfirm(id){
   pendingDeleteId = id;
-  pendingDeleteKind = kind || 'report';
   deleteConfirmOverlay.classList.add('show');
 }
 function closeDeleteConfirm(){
@@ -578,11 +674,9 @@ deleteConfirmOverlay.addEventListener('click', (e) => {
 });
 deleteOkBtn.addEventListener('click', async () => {
   const id = pendingDeleteId;
-  const kind = pendingDeleteKind;
   closeDeleteConfirm();
   if(!id) return;
-  if(kind === 'collection') await performDeleteCollection(id);
-  else await performDelete(id);
+  await performDelete(id);
 });
 
 async function performDelete(id){
@@ -620,50 +714,6 @@ async function performDelete(id){
   }catch(err){
     console.warn('統計情報の更新に失敗しました（削除自体は完了しています）', err);
   }
-}
-
-/* ---------------------------------------------------------------------
-   回収記録の取り消し（他ユーザーが見つけたゴミを自分が回収した記録）。
-   自分の履歴から消すだけでなく、元の報告(reports)を「未回収」に戻し、
-   他のユーザーが再びそのゴミを地図上で回収できるようにする。
-   --------------------------------------------------------------------- */
-async function performDeleteCollection(id){
-  const c = myCollections.find(x => x.id === id);
-  if(!c) return;
-
-  deleteOkBtn.disabled = true;
-
-  try{
-    // まず自分の回収記録を削除する。これが成功すれば「取り消し」自体は完了とみなす。
-    await db.collection('collections').doc(id).delete();
-  }catch(err){
-    console.error('回収記録の削除に失敗しました', err && err.code, err && err.message);
-    alert(`取り消しに失敗しました。もう一度お試しください。${err && err.code ? `\n(${err.code})` : ''}`);
-    deleteOkBtn.disabled = false;
-    return;
-  }
-  deleteOkBtn.disabled = false;
-
-  // 写真の削除は付随処理
-  await db.collection('collectionPhotos').doc(id).delete().catch(() => {});
-
-  // 元の報告を「未回収」に戻す（他ユーザーが再度回収できるように）。
-  // これも付随処理として扱い、失敗しても自分の履歴からの削除は成立させる。
-  if(c.reportId){
-    try{
-      await db.collection('reports').doc(c.reportId).update({
-        collected: false,
-        collectedBy: firebase.firestore.FieldValue.delete(),
-        collectedAt: firebase.firestore.FieldValue.delete()
-      });
-    }catch(err){
-      console.warn('元の報告を未回収に戻せませんでした', err);
-    }
-  }
-
-  myCollections = myCollections.filter(x => x.id !== id);
-  historyEntries = historyEntries.filter(x => x.id !== id);
-  renderHistoryList();
 }
 
 /* ---------------------------------------------------------------------
@@ -960,23 +1010,10 @@ editSaveBtn.addEventListener('click', async () => {
     }
   }
 
-  // ローカルの一覧データも更新して再描画
+  // ローカルの一覧データを更新し、フィルター条件を保ったまま一覧全体を再描画する
+  // （カテゴリ変更で絞り込み対象から外れる/入るケースがあるため、部分置換ではなく全体再描画にする）
   Object.assign(r, updateData);
-  const idx = myReports.findIndex(x => x.id === editingId);
-  const rowEl = historyListEl.querySelector(`.history-row[data-id="${CSS.escape(editingId)}"]`);
-  if(rowEl){
-    rowEl.outerHTML = renderRow(r);
-    if(editPhotoDataUrl !== undefined){
-      const wrap = document.getElementById('thumb-' + r.id);
-      if(wrap){
-        wrap.innerHTML = (typeof editPhotoDataUrl === 'string')
-          ? `<img src="${editPhotoDataUrl}" alt="">`
-          : `<div class="thumb-icon">${CATEGORY_EMOJI[r.category] || '🗑️'}</div>`;
-      }
-    } else {
-      loadThumbnails();
-    }
-  }
+  renderHistoryList();
 
   closeEditModal();
   editSaveBtn.disabled = false;
