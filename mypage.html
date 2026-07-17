@@ -258,6 +258,12 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 
+/* history.html と同じ理由で、ゲスト（匿名）ログインのUIDが
+   ページ遷移・再読み込みで変わらないよう、認証状態の永続化を明示しておく。 */
+auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(err => {
+  console.warn('認証の永続化設定に失敗しました', err);
+});
+
 const LOGIN_PAGE = "login.html";
 
 const overlay        = document.getElementById('loadingOverlay');
@@ -339,30 +345,54 @@ function renderProfile(data, user){
    確実に動作することが確認できているため、環境差異のリスクが少ない）。
    --------------------------------------------------------------------- */
 async function renderStatsFromReports(uid){
-  try{
-    // 総発見数・大型ゴミの自己回収数（自分の reports から集計）と、
-    // 他ユーザーが見つけたゴミを実際に回収した記録数（collections から集計）を
-    // 両方合算して「総回収数」とする。
-    const [reportsSnap, collectionsSnap] = await Promise.all([
-      db.collection('reports').where('uid', '==', uid).get(),
-      db.collection('collections').where('collectorUid', '==', uid).get()
-    ]);
+  // 総発見数・大型ゴミの自己回収数（自分の reports から集計）と、
+  // 他ユーザーが見つけたゴミを実際に回収した記録数（collections から集計）を
+  // 両方合算して「総回収数」とする。
+  // allSettled にしているのは、片方のクエリだけが権限エラーなどで失敗しても、
+  // 成功しているもう片方の数値まで「—」にしてしまわないようにするため。
+  const [reportsResult, collectionsResult] = await Promise.allSettled([
+    db.collection('reports').where('uid', '==', uid).get(),
+    db.collection('collections').where('collectorUid', '==', uid).get()
+  ]);
 
-    const totalFinds = reportsSnap.size;
+  let totalFinds = 0;
+  let totalCollected = 0;
+  let hadPermissionError = false;
+  let hadOtherError = false;
 
-    let totalCollected = 0;
-    reportsSnap.forEach(doc => {
+  if(reportsResult.status === 'fulfilled'){
+    totalFinds = reportsResult.value.size;
+    reportsResult.value.forEach(doc => {
       if(doc.data().isBulky === true) totalCollected++;
     });
-    totalCollected += collectionsSnap.size;
+  } else {
+    console.error('発見統計の集計に失敗しました', reportsResult.reason);
+    if(reportsResult.reason && reportsResult.reason.code === 'permission-denied') hadPermissionError = true;
+    else hadOtherError = true;
+  }
 
-    statFindsEl.textContent = totalFinds.toLocaleString();
-    statCollectedEl.textContent = totalCollected.toLocaleString();
-  }catch(err){
-    console.error('発見統計の集計に失敗しました', err);
+  if(collectionsResult.status === 'fulfilled'){
+    totalCollected += collectionsResult.value.size;
+  } else {
+    console.error('回収統計の集計に失敗しました', collectionsResult.reason);
+    if(collectionsResult.reason && collectionsResult.reason.code === 'permission-denied') hadPermissionError = true;
+    else hadOtherError = true;
+  }
+
+  if(hadPermissionError && !hadOtherError && totalFinds === 0 && totalCollected === 0){
+    // 完全に権限エラーで何も取得できなかった場合は「0」ではなく、原因が分かる表示にする
+    statFindsEl.textContent = '権限エラー';
+    statCollectedEl.textContent = '権限エラー';
+    return;
+  }
+  if(hadOtherError && totalFinds === 0 && totalCollected === 0){
     statFindsEl.textContent = '—';
     statCollectedEl.textContent = '—';
+    return;
   }
+
+  statFindsEl.textContent = totalFinds.toLocaleString();
+  statCollectedEl.textContent = totalCollected.toLocaleString();
 }
 
 editNameBtn.addEventListener('click', async () => {

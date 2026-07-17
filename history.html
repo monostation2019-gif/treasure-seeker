@@ -350,6 +350,16 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 
+/* ゲスト（匿名）ログインのUIDがページ遷移・再読み込みのたびに変わってしまうと、
+   discover.html で書き込んだ uid と、このページで絞り込みに使う uid が
+   食い違い、「登録はできるのに履歴・プロフィールには何も出てこない」という
+   症状になる。これを避けるため、認証状態を必ずブラウザに永続化(LOCAL)する
+   ことを明示しておく（本来デフォルトでもLOCALだが、明示することで
+   意図しない挙動変化を防ぐ）。 */
+auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(err => {
+  console.warn('認証の永続化設定に失敗しました', err);
+});
+
 const LOGIN_PAGE = "login.html";
 
 const overlay         = document.getElementById('loadingOverlay');
@@ -412,34 +422,52 @@ function formatDate(ts){
    履歴一覧の取得・描画
    --------------------------------------------------------------------- */
 async function loadHistory(){
-  try{
-    // uid の等価条件のみで取得する（orderByを併用すると複合インデックスが必要になり、
-    // 未作成の場合はクエリが失敗して一覧が反映されない原因になるため、並び替えは
-    // クライアント側で行う）
-    const [reportsSnap, collectionsSnap] = await Promise.all([
-      db.collection('reports').where('uid', '==', currentUser.uid).limit(200).get(),
-      db.collection('collections').where('collectorUid', '==', currentUser.uid).limit(200).get()
-    ]);
+  // uid の等価条件のみで取得する（orderByを併用すると複合インデックスが必要になり、
+  // 未作成の場合はクエリが失敗して一覧が反映されない原因になるため、並び替えは
+  // クライアント側で行う）。
+  // allSettled にしているのは、片方のクエリ（例：collectionsコレクションの
+  // ルール未整備）だけが失敗した場合に、成功しているもう片方まで消してしまわない
+  // ようにするため。
+  const [reportsResult, collectionsResult] = await Promise.allSettled([
+    db.collection('reports').where('uid', '==', currentUser.uid).limit(200).get(),
+    db.collection('collections').where('collectorUid', '==', currentUser.uid).limit(200).get()
+  ]);
 
-    myReports = reportsSnap.docs.map(doc => ({ id: doc.id, ...doc.data(), _kind: 'report' }));
-    myCollections = collectionsSnap.docs.map(doc => ({ id: doc.id, ...doc.data(), _kind: 'collection' }));
+  let hadPermissionError = false;
 
-    historyEntries = [...myReports, ...myCollections];
-    historyEntries.sort((a, b) => {
-      const at = a.createdAt && a.createdAt.toMillis ? a.createdAt.toMillis() : 0;
-      const bt = b.createdAt && b.createdAt.toMillis ? b.createdAt.toMillis() : 0;
-      return bt - at;
-    });
+  if(reportsResult.status === 'fulfilled'){
+    myReports = reportsResult.value.docs.map(doc => ({ id: doc.id, ...doc.data(), _kind: 'report' }));
+  } else {
+    console.error('発見記録の取得に失敗しました', reportsResult.reason);
+    if(reportsResult.reason && reportsResult.reason.code === 'permission-denied') hadPermissionError = true;
+    myReports = [];
+  }
 
-    renderHistoryList();
-  }catch(err){
-    console.error('履歴の取得に失敗しました', err.code, err.message);
+  if(collectionsResult.status === 'fulfilled'){
+    myCollections = collectionsResult.value.docs.map(doc => ({ id: doc.id, ...doc.data(), _kind: 'collection' }));
+  } else {
+    console.error('回収記録の取得に失敗しました', collectionsResult.reason);
+    if(collectionsResult.reason && collectionsResult.reason.code === 'permission-denied') hadPermissionError = true;
+    myCollections = [];
+  }
+
+  historyEntries = [...myReports, ...myCollections];
+  historyEntries.sort((a, b) => {
+    const at = a.createdAt && a.createdAt.toMillis ? a.createdAt.toMillis() : 0;
+    const bt = b.createdAt && b.createdAt.toMillis ? b.createdAt.toMillis() : 0;
+    return bt - at;
+  });
+
+  if(historyEntries.length === 0 && hadPermissionError){
     historyListEl.innerHTML = `
       <div class="history-empty">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 9v4M12 17h.01"/><circle cx="12" cy="12" r="9"/></svg>
-        履歴を取得できませんでした
+        この端末・アカウントには履歴を読み取る権限がありません（Firestoreのセキュリティルールをご確認ください）
       </div>`;
+    return;
   }
+
+  renderHistoryList();
 }
 
 /* 一覧全体の再描画（空状態も含めて一元管理する） */
