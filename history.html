@@ -319,7 +319,6 @@
     </div>
     <div class="status-tabs" id="statusTabs">
       <div class="status-tab active" data-status="all">発見</div>
-      <div class="status-tab" data-status="uncollected">未回収</div>
       <div class="status-tab" data-status="collected">回収</div>
     </div>
   </header>
@@ -568,12 +567,15 @@ let currentUser = null;
 let myReports = [];
 let historyEntries = [];  // = myReports のコピー（並び替え済み）。自分の発見記録のみを表示する
 let activeCategory = 'all';   // 種類別フィルター（ヘッダーのchips）
-let activeStatus = 'all';     // ステータスフィルター（発見=all / 未回収=uncollected / 回収=collected）
+let activeStatus = 'all';     // ステータスフィルター（発見=all / 回収=collected）
 
 /* ---------------------------------------------------------------------
    発見スタンプラリー
-   ・進捗 = 自分の発見総数(myReports.length) − stampClaimedCount（これまでに
-     「使う」を選んで消費したぶん）。9たまるごとに獲得ボタンが押せるようになる。
+   ・進捗 = 自分の発見総数(myReports.length) ＋ 自分の回収総数(myCollectionsCount)
+     − stampClaimedCount（これまでに「使う」を選んで消費したぶん）。
+     つまり「発見してもスタンプ」「(他ユーザーの発見物を)回収してもスタンプ」の
+     どちらも自分自身のスタンプとして貯まる。他ユーザーの操作は一切影響しない。
+   ・9たまるごとに獲得ボタンが押せるようになる。
    ・「使わない」を選んだ場合は何も消費せず、達成状態のまま維持する
      （次にページを開いた時もすぐ獲得ボタンを押せる）。
    --------------------------------------------------------------------- */
@@ -589,6 +591,7 @@ let stampClaimedCount = 0;
 let userPoints = 0;
 let userBadges = [];
 let userRewards = [];
+let myCollectionsCount = 0; // 自分が(他ユーザーの発見物を)回収した件数。スタンプ進捗の加算にのみ使う
 
 
 // 編集中の状態
@@ -663,11 +666,24 @@ async function loadStampState(){
   }catch(err){
     console.warn('スタンプの状態取得に失敗しました', err);
   }
+
+  // 自分の回収件数は一覧表示には使わないため、件数だけをcount()集計で取得する
+  // （ドキュメント本体を全件取得しない分、通信量・読み取り数を抑えられる）
+  try{
+    const countSnap = await db.collection('collections')
+      .where('collectorUid', '==', currentUser.uid)
+      .count().get();
+    myCollectionsCount = countSnap.data().count;
+  }catch(err){
+    console.warn('回収件数の取得に失敗しました', err);
+    myCollectionsCount = 0;
+  }
+
   renderStampBoard();
 }
 
 function renderStampBoard(){
-  const progress = Math.max(0, myReports.length - stampClaimedCount);
+  const progress = Math.max(0, (myReports.length + myCollectionsCount) - stampClaimedCount);
   const filled = Math.min(progress, STAMP_GOAL);
   const ready = progress >= STAMP_GOAL;
 
@@ -785,7 +801,6 @@ function isEntryCollected(r){
 function getFilteredEntries(){
   return historyEntries.filter(r => {
     if(activeCategory !== 'all' && r.category !== activeCategory) return false;
-    if(activeStatus === 'uncollected' && isEntryCollected(r)) return false;
     if(activeStatus === 'collected' && !isEntryCollected(r)) return false;
     return true;
   });
