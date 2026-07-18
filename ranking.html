@@ -73,6 +73,18 @@
   .rank-row.tappable{cursor:pointer;}
   .rank-row.tappable:active{background:var(--forest-soft);}
 
+  .like-btn{
+    display:flex; align-items:center; gap:4px; flex-shrink:0;
+    border:1.5px solid var(--line); background:var(--card); color:var(--ink-soft);
+    border-radius:999px; padding:6px 11px; font-size:12.5px; font-weight:700;
+    cursor:pointer; transition:background .15s ease, border-color .15s ease, color .15s ease, transform .1s ease;
+  }
+  .like-btn svg{width:15px; height:15px; fill:none; stroke:currentColor; stroke-width:2;}
+  .like-btn.liked{background:#FBEAE6; border-color:var(--torii); color:var(--torii);}
+  .like-btn.liked svg{fill:var(--torii); stroke:var(--torii);}
+  .like-btn:active{transform:scale(0.94);}
+  .like-btn:disabled{opacity:0.6; cursor:default;}
+
   .user-detail-overlay{
     position:fixed; inset:0; z-index:1000; background:rgba(20,28,20,0.55);
     display:none; align-items:center; justify-content:center; padding:24px;
@@ -162,10 +174,10 @@
   <header>
     <h1>ランキング</h1>
     <div class="scope-tabs" id="scopeTabs">
-      <button class="active" data-scope="town">地域別</button>
-      <button data-scope="neighborhoodAssoc">自治会別</button>
-      <button data-scope="school">学校別</button>
-      <button data-scope="company">企業別</button>
+      <button class="active" data-scope="town">ヒートマップ</button>
+      <button data-scope="gourmet">グルメ</button>
+      <button data-scope="history">歴史・文化</button>
+      <button data-scope="recommend">おすすめ</button>
       <button data-scope="user">ユーザー</button>
     </div>
   </header>
@@ -261,11 +273,34 @@ const userDetailAvatar  = document.getElementById('userDetailAvatar');
 const userDetailName    = document.getElementById('userDetailName');
 const userDetailBio     = document.getElementById('userDetailBio');
 
-let currentScope = 'town';   // town / neighborhoodAssoc / school / company の Firestore フィールド名
+let currentUser = null;
+let currentScope = 'town';   // town(ヒートマップ) / gourmet(グルメ) / history(歴史・文化) / recommend(おすすめ) / user
 let currentPeriod = 'week'; // week / month / all（累計＝今年）
+
+/* グルメ・歴史文化・おすすめタブは、reports の category フィールドの値で絞り込む
+   （地図・発見ページ側のカテゴリ表記と完全一致させる必要がある） */
+const CATEGORY_SCOPES = {
+  gourmet: 'グルメ',
+  history: '歴史・文化',
+  recommend: 'おすすめ'
+};
+const CATEGORY_EMOJI = { 'グルメ':'🍴', '歴史・文化':'🏯', 'おすすめ':'⭐' };
+
+let currentCategoryItems = [];   // グルメ/歴史文化/おすすめ表示中に、いいね操作の対象を保持しておくキャッシュ
+let currentCategoryLabel = '';   // 表示中のカテゴリ名（絵文字表示用）
 
 function escapeHtml(str){
   return String(str).replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
+}
+
+/* グルメ/歴史文化/おすすめの並び替え：いいね数が多い順。
+   いいね数が同数（初期状態は全員0）の場合は50音順で並べる。 */
+const jaCollator = new Intl.Collator('ja');
+function sortCategoryItems(items){
+  return items.slice().sort((a, b) => {
+    if(b.likeCount !== a.likeCount) return b.likeCount - a.likeCount;
+    return jaCollator.compare(a.name, b.name);
+  });
 }
 
 /* 各期間の開始日（Dateオブジェクト）を計算する。
@@ -313,10 +348,11 @@ function updatePeriodRangeLabel(){
 
 /* ---------------------------------------------------------------------
    ランキング取得。
-   ※ reports コレクションの各ドキュメントに、地域別なら town、
-     自治会別なら neighborhoodAssoc、学校別なら school、
-     企業別なら company フィールドがある想定。
-     まだ値が入っていないカテゴリは自然に「データがありません」表示になる。
+   ・town（ヒートマップ）：reports の town フィールドで集計し、地域ごとの
+     発見件数（＝ゴミの多さ）でランキングする（従来と同じ挙動）。
+   ・gourmet / history / recommend：category が一致する発見を1件ずつ
+     ランキング表示する（集計しない）。初期は50音順、いいねが付けば
+     いいね数の多い順に並び替わる。
    --------------------------------------------------------------------- */
 async function loadRanking(){
   updatePeriodRangeLabel();
@@ -354,10 +390,30 @@ async function loadRanking(){
       return;
     }
 
+    if(CATEGORY_SCOPES[currentScope]){
+      // グルメ／歴史・文化／おすすめ：category が一致する発見を1件ずつ並べる
+      const targetCategory = CATEGORY_SCOPES[currentScope];
+      const items = [];
+      snap.forEach(doc => {
+        const d = doc.data();
+        if(d.category !== targetCategory) return;
+        const likedBy = Array.isArray(d.likedBy) ? d.likedBy : [];
+        items.push({
+          id: doc.id,
+          name: (d.memo && d.memo.trim()) ? d.memo.trim() : (d.town ? d.town : '名称未設定'),
+          likedBy,
+          likeCount: likedBy.length
+        });
+      });
+      renderCategoryRanking(items, targetCategory);
+      return;
+    }
+
+    // ヒートマップ（地域別＝town フィールドで集計）
     const counts = {};
     snap.forEach(doc => {
       const d = doc.data();
-      const key = d[currentScope];
+      const key = d.town;
       if(!key) return;
       counts[key] = (counts[key] || 0) + 1;
     });
@@ -397,6 +453,84 @@ function renderRanking(sorted){
   }).join('');
 
   setupMoreButton(sorted.length);
+}
+
+/* グルメ／歴史・文化／おすすめ：1件ずつのランキング（いいね数→50音順） */
+function renderCategoryRanking(items, categoryLabel){
+  currentCategoryLabel = categoryLabel;
+  currentCategoryItems = sortCategoryItems(items);
+  renderCategoryRankingList();
+}
+
+/* currentCategoryItems の現在の並び順のまま再描画する（いいね操作の楽観的更新用） */
+function renderCategoryRankingList(){
+  if(currentCategoryItems.length === 0){
+    rankCard.innerHTML = `
+      <div class="rank-empty">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 6h18M5 6v14M19 6v14M2 3h20M7 10h10"/></svg>
+        まだこの区分のデータがありません
+      </div>`;
+    setupMoreButton(0);
+    return;
+  }
+
+  const emoji = CATEGORY_EMOJI[currentCategoryLabel] || '⭐';
+  const medalClasses = ['m1','m2','m3'];
+  rankCard.innerHTML = currentCategoryItems.map((item, i) => {
+    const medalClass = medalClasses[i] || 'mn';
+    const extraClass = i >= 5 ? ' rank-row-extra' : '';
+    const liked = !!(currentUser && item.likedBy.includes(currentUser.uid));
+    return `
+      <div class="rank-row${extraClass}">
+        <div class="rank-medal ${medalClass}">${i+1}</div>
+        <div class="rank-name">${emoji} ${escapeHtml(item.name)}</div>
+        <button class="like-btn${liked ? ' liked' : ''}" data-id="${item.id}" type="button">
+          <svg viewBox="0 0 24 24"><path d="M12 21s-7.2-4.4-9.6-8.9C.6 8.4 2.2 4.5 6 4.5c2 0 3.4 1 4.5 2.3C11.6 5.5 13 4.5 15 4.5c3.8 0 5.4 3.9 3.6 7.6C19.2 16.6 12 21 12 21z"/></svg>
+          <span class="like-count">${item.likeCount}</span>
+        </button>
+      </div>`;
+  }).join('');
+
+  setupMoreButton(currentCategoryItems.length);
+}
+
+/* いいねの付け外し（自分1人につき1回まで、押すたびにON/OFFを切り替える） */
+async function toggleLike(reportId, btnEl){
+  if(!currentUser) return;
+  const item = currentCategoryItems.find(x => x.id === reportId);
+  if(!item) return;
+
+  const alreadyLiked = item.likedBy.includes(currentUser.uid);
+  btnEl.disabled = true;
+
+  // 楽観的更新：先に画面を更新し、失敗したら元に戻す
+  applyLikeChange(item, !alreadyLiked);
+  currentCategoryItems = sortCategoryItems(currentCategoryItems);
+  renderCategoryRankingList();
+
+  try{
+    await db.collection('reports').doc(reportId).update({
+      likedBy: alreadyLiked
+        ? firebase.firestore.FieldValue.arrayRemove(currentUser.uid)
+        : firebase.firestore.FieldValue.arrayUnion(currentUser.uid)
+    });
+  }catch(err){
+    console.error('いいねの更新に失敗しました', err);
+    applyLikeChange(item, alreadyLiked); // 元の状態に戻す
+    currentCategoryItems = sortCategoryItems(currentCategoryItems);
+    renderCategoryRankingList();
+    alert('いいねの更新に失敗しました。もう一度お試しください。');
+  }
+}
+
+function applyLikeChange(item, shouldLike){
+  const uid = currentUser.uid;
+  if(shouldLike){
+    if(!item.likedBy.includes(uid)) item.likedBy = item.likedBy.concat(uid);
+  }else{
+    item.likedBy = item.likedBy.filter(u => u !== uid);
+  }
+  item.likeCount = item.likedBy.length;
 }
 
 async function renderUserRanking(sortedUsers){
@@ -470,6 +604,12 @@ scrollTopBtn.addEventListener('click', () => {
 let userProfileCache = [];
 
 rankCard.addEventListener('click', (e) => {
+  const likeBtn = e.target.closest('.like-btn');
+  if(likeBtn){
+    toggleLike(likeBtn.dataset.id, likeBtn);
+    return;
+  }
+
   const row = e.target.closest('.rank-row.tappable');
   if(!row) return;
   const idx = Number(row.dataset.index);
@@ -520,6 +660,7 @@ auth.onAuthStateChanged((user) => {
     window.location.href = LOGIN_PAGE;
     return;
   }
+  currentUser = user;
   overlay.style.opacity = '0';
   setTimeout(() => overlay.style.display = 'none', 350);
   loadRanking();
