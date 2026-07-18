@@ -547,15 +547,18 @@ function renderReportMarkers(){
   reportMarkerGroup = L.layerGroup();
 
   if(map.getZoom() >= MARKER_MIN_ZOOM){
+    // 回収済みでもピン自体は残す（ポップアップは引き続き見られるようにする。
+    // ポップアップ内の「回収する」ボタンだけを buildPopupHtml 側で消す）
     const targetReports = allReports.filter(r => {
       if(typeof r.lat !== 'number' || typeof r.lng !== 'number') return false;
-      if(r.collected) return false; // 回収済みは非表示
       return activeCategory === 'all' || r.category === activeCategory;
     });
 
     targetReports.forEach(r => {
       const marker = L.circleMarker([r.lat, r.lng], {
-        radius: 9, weight: 2, color: '#fff', fillColor: '#3E6B4F', fillOpacity: 0.95
+        radius: 9, weight: 2, color: '#fff',
+        fillColor: r.collected ? '#9CA3AF' : '#3E6B4F', // 回収済みはグレーで見分けられるように
+        fillOpacity: r.collected ? 0.75 : 0.95
       });
       marker.bindPopup(buildPopupHtml(r), { closeButton: true, maxWidth: 220 });
       marker.on('popupopen', () => {
@@ -780,6 +783,19 @@ collectSubmitBtn.addEventListener('click', async () => {
       }catch(err){
         console.warn('回収写真の保存に失敗しました（回収記録自体は完了済み）', err);
       }
+    }
+
+    // 発見スタンプラリー用に、自分のユーザードキュメントへ回収件数のカウンタも
+    // 直接加算しておく（history.htmlでの集計をcollectionsコレクションへの
+    // count()クエリに頼らず、自分のユーザードキュメントの読み取りだけで
+    // 完結させるため。collectionsコレクション自体への読み取り権限が無くても
+    // スタンプ進捗には確実に反映される）
+    try{
+      await db.collection('users').doc(user.uid).set({
+        collectionsCount: firebase.firestore.FieldValue.increment(1)
+      }, { merge: true });
+    }catch(err){
+      console.warn('回収カウンタの更新に失敗しました（回収記録自体は完了済み）', err);
     }
 
     // ローカルの状態も更新して即座に地図へ反映する

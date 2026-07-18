@@ -710,16 +710,28 @@ async function loadStampState(){
   }
 
   // 自分の回収記録は、IDを使った進捗判定はしない（このページから削除する手段が
-  // ないため）ので、必要なのは件数のみ。件数だけをcount()集計で取得する
-  // （ドキュメント本体を全件取得しない分、通信量・読み取り数を抑えられる）
-  try{
-    const countSnap = await db.collection('collections')
-      .where('collectorUid', '==', currentUser.uid)
-      .count().get();
-    myCollectionsCount = countSnap.data().count;
-  }catch(err){
-    console.warn('回収件数の取得に失敗しました', err);
-    myCollectionsCount = 0;
+  // ないため）ので、必要なのは件数のみ。
+  // ・新方式：map.html側で回収するたびに users/{uid}.collectionsCount を
+  //   直接加算しているので、その値をそのまま使う（collectionsコレクション
+  //   自体への読み取り権限が無くても、自分のユーザードキュメントは既に
+  //   ポイント/バッジ取得で読めているので確実に反映される）
+  // ・旧方式：collectionsCount がまだ無いアカウントは、一度だけ集計クエリで
+  //   件数を数え、以後のために collectionsCount へ書き戻して移行する
+  if(typeof userDocData.collectionsCount === 'number'){
+    myCollectionsCount = userDocData.collectionsCount;
+  } else {
+    try{
+      const countSnap = await db.collection('collections')
+        .where('collectorUid', '==', currentUser.uid)
+        .count().get();
+      myCollectionsCount = countSnap.data().count;
+      db.collection('users').doc(currentUser.uid)
+        .set({ collectionsCount: myCollectionsCount }, { merge: true })
+        .catch(err => console.warn('回収カウンタの移行に失敗しました（次回起動時に再試行されます）', err));
+    }catch(err){
+      console.warn('回収件数の取得に失敗しました', err);
+      myCollectionsCount = 0;
+    }
   }
 
   if(Array.isArray(userDocData.claimedReportIds)){
