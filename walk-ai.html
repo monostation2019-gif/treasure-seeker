@@ -12,12 +12,6 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 
-<!-- ================================================================
-     Leaflet（ナビ画面の地図・ルート表示・現在地表示に使用）
-     ================================================================ -->
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Kiwi+Maru:wght@400;500&family=Noto+Sans+JP:wght@400;500;700;900&display=swap" rel="stylesheet">
 
@@ -219,6 +213,7 @@
   }
   .btn-full{ width:100%; }
   .btn svg{width:16px; height:16px;}
+  .detail-source-note a{ color:var(--forest); font-weight:700; text-decoration:underline; }
 
   /* ---------- ローディング（結果算出中） ---------- */
   .calc-wrap{
@@ -383,67 +378,16 @@
   }
   .detail-tags{ display:flex; flex-wrap:wrap; gap:8px; }
 
-  /* ---------- ナビ開始（Leaflet地図） ---------- */
-  #navMap{
-    width:100%; height:100%;
-    border-radius:0;
+  /* ---------- 詳細画面：ここナビ／アプリ地図で見る ボタン ---------- */
+  .nav-action-row{
+    display:flex; flex-direction:column; gap:10px;
+    margin-top:20px;
   }
-  .nav-map-wrap{
-    position:absolute; inset:0;
-  }
-  .nav-info-sheet{
-    position:absolute; left:0; right:0; bottom:0;
+  .btn-outline{
     background:var(--card);
-    border-radius:22px 22px 0 0;
-    box-shadow:0 -8px 24px rgba(0,0,0,0.14);
-    padding:16px 18px calc(env(safe-area-inset-bottom,0px) + 16px);
-    z-index:5;
-  }
-  .nav-info-title{
-    font-family:"Kiwi Maru", serif;
-    font-size:15.5px; color:var(--ink);
-    margin-bottom:4px;
-  }
-  .nav-info-meta{ font-size:12px; color:var(--ink-soft); margin-bottom:12px; }
-  .locate-fab{
-    position:absolute; right:14px; z-index:5;
-    width:44px; height:44px; border-radius:50%;
-    background:var(--card);
-    box-shadow:0 6px 16px rgba(0,0,0,0.18);
-    display:flex; align-items:center; justify-content:center;
     color:var(--forest-deep);
-    border:none;
+    border:1.5px solid var(--forest);
   }
-  .locate-fab svg{ width:20px; height:20px; }
-  .gps-badge{
-    position:absolute; left:14px; z-index:5;
-    background:rgba(44,78,58,0.88);
-    color:#fff; font-size:11px; font-weight:700;
-    padding:6px 12px; border-radius:20px;
-    display:flex; align-items:center; gap:6px;
-  }
-  .gps-badge .dot{
-    width:7px; height:7px; border-radius:50%;
-    background:#7CD98B;
-  }
-  .gps-badge.off .dot{ background:#C6C6C6; }
-  .gps-badge.searching .dot{ background:var(--gold); animation:pulse 1s infinite; }
-  @keyframes pulse{ 50%{ opacity:.3; } }
-
-  /* #screen-nav 専用：main の通常パディングを外してフル画面地図にする */
-  #screen-nav.active{
-    position:absolute; inset:0; top:0;
-    z-index:20;
-    background:var(--cream);
-  }
-  #screen-nav .nav-header{
-    position:absolute; top:0; left:0; right:0; z-index:6;
-    padding:calc(env(safe-area-inset-top,0px) + 14px) 16px 40px;
-    background:linear-gradient(180deg, rgba(0,0,0,0.42), transparent);
-    display:flex; align-items:center; gap:10px;
-  }
-  #screen-nav .nav-header .back-btn{ background:rgba(255,255,255,0.85); color:var(--forest-deep); border-color:transparent; }
-  #screen-nav .nav-header .nav-header-title{ color:#fff; font-family:"Kiwi Maru", serif; font-size:15px; }
 
   .toast{
     position:fixed; left:50%; bottom:26px; transform:translateX(-50%);
@@ -572,44 +516,28 @@
 
       <div class="detail-section-title">コースについて</div>
       <div class="detail-desc" id="detailDesc"></div>
+      <div class="detail-source-note" id="detailSourceNote" style="display:none; margin-top:10px; font-size:11.5px; color:var(--ink-soft); line-height:1.6;"></div>
 
-      <div class="nav-btn-row">
-        <button class="btn btn-primary btn-full" id="startNavBtn">
+      <!-- ▼▼ ナビ導線：カスタム地図は持たず、既存の仕組みに乗せる ▼▼
+           ・「ここナビで開く」= map.html の popup と同じ Google Maps
+             ディレクション（https://www.google.com/maps/dir/?api=1&destination=…）
+             を新規タブで開く。実際の道案内はGoogleマップに任せる。
+           ・「アプリ地図で見る」= map.html が既に対応している
+             ?lat=..&lng=.. ジャンプ機能を使って、クリーンマップ上で
+             位置を確認できるようにする（同じLeafletインスタンスを再利用）。 -->
+      <div class="nav-action-row">
+        <button class="btn btn-primary btn-full" id="openGoogleMapsBtn">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l19-9-9 19-2-8-8-2z"/></svg>
-          このコースへ行く（ナビ開始）
+          ここナビで行く（Googleマップ）
+        </button>
+        <button class="btn btn-outline btn-full" id="openAppMapBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 20l-6-3V4l6 3 6-3 6 3v13l-6-3-6 3z"/><path d="M9 7v13M15 4v13"/></svg>
+          アプリ地図で見る
         </button>
       </div>
     </section>
 
   </main>
-
-  <!-- ============================================================
-       画面5：ナビ開始（Leaflet地図・ルート表示・GPS現在地）
-       main の外に置き、position:fixed 相当のフル画面表示にする
-       ============================================================ -->
-  <section class="screen" id="screen-nav">
-    <div class="nav-header">
-      <div class="back-btn" id="navBackBtn">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
-      </div>
-      <div class="nav-header-title" id="navHeaderTitle">ナビ開始</div>
-    </div>
-    <div class="nav-map-wrap">
-      <div id="navMap"></div>
-      <div class="gps-badge off" id="gpsBadge"><span class="dot"></span><span id="gpsBadgeText">GPS停止中</span></div>
-      <button class="locate-fab" id="locateFab" style="bottom:150px;" title="現在地へ移動">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
-      </button>
-      <div class="nav-info-sheet">
-        <div class="nav-info-title" id="navSheetName">コース名</div>
-        <div class="nav-info-meta" id="navSheetMeta">距離 / 時間</div>
-        <button class="btn btn-primary btn-full" id="gpsToggleBtn">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2C8 2 5 5 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-4-3-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>
-          GPSを開始する
-        </button>
-      </div>
-    </div>
-  </section>
 
 </div>
 
@@ -756,13 +684,6 @@ let allCourses = [];            // Firestoreから取得した全コース
 let rankedResults = [];         // 判定後の上位3件（スコア付き）
 let selectedCourse = null;      // 詳細/ナビで表示中のコース
 
-/* ナビ画面用 */
-let navMap = null;
-let navRouteLayer = null;
-let userMarker = null;
-let watchId = null;
-let gpsActive = false;
-
 /* =====================================================================
    要素参照
    ===================================================================== */
@@ -791,10 +712,6 @@ const toastEl         = document.getElementById('toast');
 function showScreen(id){
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
-
-  // ナビ画面はヘッダー／進捗バーを隠す（専用ヘッダーを使うため）
-  const isNav = (id === 'screen-nav');
-  document.getElementById('mainHeader').style.display = isNav ? 'none' : '';
 }
 
 function showToast(msg){
@@ -811,6 +728,8 @@ function renderQuestion(){
 
   headerTitle.textContent = 'AIおすすめウォーキング';
   headerSub.textContent = '質問に答えてぴったりのコースを見つけよう';
+  progressTrack.style.display = '';
+  progressLabel.style.display = '';
 
   qIndexLabel.textContent = `質問 ${currentQIndex + 1}`;
   qTextLabel.textContent = q.text;
@@ -1008,10 +927,19 @@ function toArray(v){
  * ルールベース判定：回答に対して全コースをスコアリングし、上位3件を返す。
  */
 function ruleBasedRecommend(a, courses){
-  return courses
+  const MIN_RESULTS = 3;   // 最低表示件数
+  const MAX_RESULTS = 5;   // 最大表示件数
+  const GOOD_SCORE   = 70; // この点数以上は「よく合っている」とみなす
+
+  const scored = courses
     .map(c => ({ course:c, score:scoreCourse(a, c) }))
-    .sort((x, y) => y.score - x.score)
-    .slice(0, 3);
+    .sort((x, y) => y.score - x.score);
+
+  // 一致度70%以上のコースが多ければ最大5件まで、少なければ最低3件は出す
+  const goodCount = scored.filter(s => s.score >= GOOD_SCORE).length;
+  const count = Math.min(MAX_RESULTS, Math.max(MIN_RESULTS, goodCount));
+
+  return scored.slice(0, count);
 }
 
 /**
@@ -1039,6 +967,319 @@ async function recommendCourses(a, courses){
 
 
 /* =====================================================================
+   フォールバック用コース候補（伊勢市内の実在スポットを想定した初期データ）
+   ---------------------------------------------------------------------
+   walking_courses コレクションがまだ空のときでも機能を試せるよう、
+   最低限のコース候補をコード側に同梱しておく。
+   Firestoreにコースが1件でも登録されていれば、そちらを優先して使用し、
+   このフォールバックは使用しない（runRecommendation内で判定）。
+   フィールド構成はFirestoreのwalking_coursesと完全に揃えてあるので、
+   将来的にそのままFirestoreへ移行（コピー登録）してもよい。
+   ===================================================================== */
+const FALLBACK_COURSES = [
+  {
+    id:'ise-028', courseNo:28, name:'いきいき健康ひろば①ひろば1周コース',
+    distance:0.5, time:7, difficulty:'beginner',
+    purpose:['health'], scenery:['town'],
+    wheelchair:true, dog:false, family:true, garbage_level:'none',
+    description:'万亀会館いきいき健康広場を1周する、市内でも最短クラスの入門コース。段差が少なく、歩き始めの方や高齢者にもおすすめ。',
+    start:'万亀会館いきいき健康広場', goal:'万亀会館いきいき健康広場',
+    startAddress:'万亀会館いきいき健康広場, 三重県伊勢市', tagStatus:'estimated',
+    sourceUrl:'https://www.city.ise.mie.jp/_res/projects/default_project/_page_/001/002/500/28_walking_course.pdf'
+  },
+  {
+    id:'ise-051', courseNo:51, name:'しんみち商店街コース',
+    distance:1.7, time:23, difficulty:'beginner',
+    purpose:['sightseeing','health'], scenery:['town'],
+    wheelchair:true, dog:false, family:true, garbage_level:'little',
+    description:'伊勢市駅から続くしんみち商店街を歩く、買い物ついでに楽しめる短めのコース。',
+    start:'伊勢市駅', goal:'伊勢市駅',
+    startAddress:'伊勢市駅, 三重県伊勢市', tagStatus:'estimated',
+    sourceUrl:'https://www.city.ise.mie.jp/_res/projects/default_project/_page_/001/002/500/51_walking_course.pdf'
+  },
+  {
+    id:'ise-083', courseNo:83, name:'市営大仏山公園スポーツセンター 山のなかよし広場コース',
+    distance:2.0, time:24, difficulty:'beginner',
+    purpose:['health','nature'], scenery:['forest'],
+    wheelchair:false, dog:true, family:true, garbage_level:'little',
+    description:'緑豊かな大仏山公園内を歩く、木立に囲まれたリフレッシュコース。',
+    start:'市営大仏山公園', goal:'市営大仏山公園',
+    startAddress:'市営大仏山公園, 三重県伊勢市', tagStatus:'estimated',
+    sourceUrl:'https://www.city.ise.mie.jp/_res/projects/default_project/_page_/001/002/500/83_walking_course.pdf'
+  },
+  {
+    id:'ise-054', courseNo:54, name:'豊浜東「浜海道」Aコース',
+    distance:2.3, time:30, difficulty:'beginner',
+    purpose:['nature','photo','exercise'], scenery:['sea'],
+    wheelchair:false, dog:true, family:true, garbage_level:'active',
+    description:'豊浜東地内の海沿いを歩く「浜海道」の短めコース。潮風を感じながら歩ける。',
+    start:'豊浜東地内', goal:'豊浜東地内',
+    startAddress:'東豊浜町, 三重県伊勢市', tagStatus:'estimated',
+    sourceUrl:'https://www.city.ise.mie.jp/_res/projects/default_project/_page_/001/002/500/54_walking_course.pdf'
+  },
+  {
+    id:'ise-059', courseNo:59, name:'津村町花街道コース',
+    distance:2.4, time:30, difficulty:'beginner',
+    purpose:['photo','health'], scenery:['flower','town'],
+    wheelchair:true, dog:true, family:true, garbage_level:'little',
+    description:'津村町公民館を起点に、四季の花が楽しめる街道を歩くコース。',
+    start:'津村町公民館', goal:'津村町公民館',
+    startAddress:'津村町公民館, 三重県伊勢市', tagStatus:'estimated',
+    sourceUrl:'https://www.city.ise.mie.jp/_res/projects/default_project/_page_/001/002/500/59_walking_course.pdf'
+  },
+  {
+    id:'ise-019', courseNo:19, name:'宮川堤コース',
+    distance:2.6, time:30, difficulty:'beginner',
+    purpose:['health','nature'], scenery:['river'],
+    wheelchair:false, dog:true, family:true, garbage_level:'little',
+    description:'桜並木で知られる宮川堤公園から度会橋を往復する、川沿いの定番コース。階段の上り下りあり。',
+    start:'宮川堤公園', goal:'度会橋',
+    startAddress:'宮川堤公園, 三重県伊勢市', tagStatus:'estimated',
+    sourceUrl:'https://www.city.ise.mie.jp/_res/projects/default_project/_page_/001/002/500/19_walking_course.pdf'
+  },
+  {
+    id:'ise-010', courseNo:10, name:'里の山道コース',
+    distance:2.7, time:30, difficulty:'beginner',
+    purpose:['exercise','nature'], scenery:['forest'],
+    wheelchair:false, dog:true, family:false, garbage_level:'none',
+    description:'藤里団地集会所を起点に、里山の雰囲気を楽しみながら歩けるコース。',
+    start:'藤里団地集会所', goal:'藤里団地集会所',
+    startAddress:'藤里町, 三重県伊勢市', tagStatus:'estimated',
+    sourceUrl:'https://www.city.ise.mie.jp/_res/projects/default_project/_page_/001/002/500/10_walking_course.pdf'
+  },
+  {
+    id:'ise-065', courseNo:65, name:'宇治歴史ウォーキングコース',
+    distance:3.0, time:40, difficulty:'beginner',
+    purpose:['sightseeing','photo'], scenery:['town','shrine'],
+    wheelchair:true, dog:false, family:true, garbage_level:'little',
+    description:'内宮に近い宇治地区の歴史的な町並みをめぐるコース。',
+    start:'宇治公民館', goal:'宇治公民館',
+    startAddress:'宇治館町, 三重県伊勢市', tagStatus:'estimated',
+    sourceUrl:'https://www.city.ise.mie.jp/_res/projects/default_project/_page_/001/002/500/65_walking_course.pdf'
+  },
+  {
+    id:'ise-073', courseNo:73, name:'二見汐合ウォーキングコース',
+    distance:3.0, time:40, difficulty:'normal',
+    purpose:['nature','photo','exercise'], scenery:['sea'],
+    wheelchair:false, dog:true, family:true, garbage_level:'active',
+    description:'二見町の汐合エリアを歩く海辺のコース。潮の香りと景色が楽しめる。',
+    start:'溝口地区学習等併用施設', goal:'溝口地区学習等併用施設',
+    startAddress:'二見町溝口, 三重県伊勢市', tagStatus:'estimated',
+    sourceUrl:'https://www.city.ise.mie.jp/_res/projects/default_project/_page_/001/002/500/73_walking_course.pdf'
+  },
+  {
+    id:'ise-011', courseNo:11, name:'伊勢学びの道コース',
+    distance:3.3, time:38, difficulty:'beginner',
+    purpose:['health','sightseeing'], scenery:['forest','town'],
+    wheelchair:true, dog:false, family:true, garbage_level:'little',
+    description:'皇學館大学周辺の落ち着いた通りを歩く、学びの雰囲気が漂うコース。',
+    start:'皇學館大学', goal:'皇學館大学',
+    startAddress:'皇學館大学, 三重県伊勢市', tagStatus:'estimated',
+    sourceUrl:'https://www.city.ise.mie.jp/_res/projects/default_project/_page_/001/002/500/11_walking_course.pdf'
+  },
+  {
+    id:'ise-015', courseNo:15, name:'大仏山公園コース',
+    distance:3.3, time:45, difficulty:'advanced',
+    purpose:['exercise','nature'], scenery:['forest'],
+    wheelchair:false, dog:true, family:false, garbage_level:'little',
+    description:'小俣総合体育館を起点に大仏山公園を歩く、起伏のある運動向けコース。',
+    start:'小俣総合体育館', goal:'小俣総合体育館',
+    startAddress:'小俣総合体育館, 三重県伊勢市', tagStatus:'estimated',
+    sourceUrl:'https://www.city.ise.mie.jp/_res/projects/default_project/_page_/001/002/500/15_walking_course.pdf'
+  },
+  {
+    id:'ise-062', courseNo:62, name:'音無山～二見興玉神社コース',
+    distance:3.3, time:40, difficulty:'normal',
+    purpose:['sightseeing','nature','exercise'], scenery:['shrine','sea','forest'],
+    wheelchair:false, dog:false, family:false, garbage_level:'little',
+    description:'音無山から夫婦岩で知られる二見興玉神社へ向かう、社叢と海景色を楽しめるコース。',
+    start:'二見総合支所', goal:'二見興玉神社',
+    startAddress:'二見町茶屋, 三重県伊勢市', tagStatus:'estimated',
+    sourceUrl:'https://www.city.ise.mie.jp/_res/projects/default_project/_page_/001/002/500/62_walking_course.pdf'
+  },
+  {
+    id:'ise-058', courseNo:58, name:'五十鈴川周回コース',
+    distance:3.6, time:45, difficulty:'beginner',
+    purpose:['nature','exercise'], scenery:['river','forest'],
+    wheelchair:false, dog:true, family:true, garbage_level:'active',
+    description:'五十鈴川河川敷を1周する、川沿いの自然を感じられるコース。',
+    start:'五十鈴川河川敷', goal:'五十鈴川河川敷',
+    startAddress:'宇治館町 五十鈴川河川敷, 三重県伊勢市', tagStatus:'estimated',
+    sourceUrl:'https://www.city.ise.mie.jp/_res/projects/default_project/_page_/001/002/500/58_walking_course.pdf'
+  },
+  {
+    id:'ise-023', courseNo:23, name:'二見しょうぶ・藤棚・海岸コース',
+    distance:3.7, time:50, difficulty:'beginner',
+    purpose:['photo','nature'], scenery:['flower','sea'],
+    wheelchair:true, dog:true, family:true, garbage_level:'active',
+    description:'民話の駅 蘇民を起点に、しょうぶ園・藤棚・海岸を巡る季節感のあるコース。',
+    start:'民話の駅 蘇民', goal:'民話の駅 蘇民',
+    startAddress:'二見町, 三重県伊勢市', tagStatus:'estimated',
+    sourceUrl:'https://www.city.ise.mie.jp/_res/projects/default_project/_page_/001/002/500/23_walking_course.pdf'
+  },
+  {
+    id:'ise-057', courseNo:57, name:'楠部・朝熊コース',
+    distance:3.7, time:45, difficulty:'normal',
+    purpose:['exercise','nature'], scenery:['forest','autumn'],
+    wheelchair:false, dog:false, family:false, garbage_level:'none',
+    description:'朝熊山の山麓、楠部エリアを歩く自然豊かなコース。',
+    start:'四郷地区コミュニティセンター', goal:'四郷地区コミュニティセンター',
+    startAddress:'楠部町, 三重県伊勢市', tagStatus:'estimated',
+    sourceUrl:'https://www.city.ise.mie.jp/_res/projects/default_project/_page_/001/002/500/57_walking_course2.pdf'
+  },
+  {
+    id:'ise-069', courseNo:69, name:'浜郷・勢田川ウォーキングコース',
+    distance:3.7, time:50, difficulty:'normal',
+    purpose:['health','nature'], scenery:['river','town'],
+    wheelchair:true, dog:true, family:true, garbage_level:'little',
+    description:'浜郷小学校を起点に勢田川沿いを歩く、町と川の景色を楽しめるコース。',
+    start:'浜郷小学校', goal:'浜郷小学校',
+    startAddress:'黒瀬町, 三重県伊勢市', tagStatus:'estimated',
+    sourceUrl:'https://www.city.ise.mie.jp/_res/projects/default_project/_page_/001/002/500/69_walking_course.pdf'
+  },
+  {
+    id:'ise-016', courseNo:16, name:'サンアリーナ・絆の森コース',
+    distance:3.8, time:50, difficulty:'advanced',
+    purpose:['exercise','nature'], scenery:['forest'],
+    wheelchair:false, dog:true, family:false, garbage_level:'none',
+    description:'県営サンアリーナ周辺の「絆の森」を歩く、運動向けのやや強度高めコース。',
+    start:'県営サンアリーナ', goal:'県営サンアリーナ',
+    startAddress:'朝熊町 県営サンアリーナ, 三重県伊勢市', tagStatus:'estimated',
+    sourceUrl:'https://www.city.ise.mie.jp/_res/projects/default_project/_page_/001/002/500/16_walking_course.pdf'
+  },
+  {
+    id:'ise-038', courseNo:38, name:'月夜見宮～外宮周辺コース',
+    distance:3.8, time:50, difficulty:'beginner',
+    purpose:['sightseeing','health'], scenery:['shrine','forest'],
+    wheelchair:true, dog:false, family:true, garbage_level:'little',
+    description:'月夜見宮から外宮周辺をめぐる、神宮の杜を感じられる参拝コース。',
+    start:'福祉センター', goal:'外宮 表参道口',
+    startAddress:'福祉センター, 三重県伊勢市', tagStatus:'estimated',
+    sourceUrl:'https://www.city.ise.mie.jp/_res/projects/default_project/_page_/001/002/500/38_walking_course2.pdf'
+  },
+  {
+    id:'ise-027', courseNo:27, name:'神社コース',
+    distance:4.0, time:55, difficulty:'normal',
+    purpose:['sightseeing'], scenery:['shrine'],
+    wheelchair:true, dog:false, family:true, garbage_level:'none',
+    description:'旧フェリー乗り場を起点に、市内の神社を巡る参拝コース。',
+    start:'旧フェリー乗り場', goal:'旧フェリー乗り場',
+    startAddress:'下野町, 三重県伊勢市', tagStatus:'estimated',
+    sourceUrl:'https://www.city.ise.mie.jp/_res/projects/default_project/_page_/001/002/500/27_walking_course.pdf'
+  },
+  {
+    id:'ise-045', courseNo:45, name:'徴古館・古市コース',
+    distance:4.0, time:50, difficulty:'normal',
+    purpose:['sightseeing','photo'], scenery:['town','shrine'],
+    wheelchair:true, dog:false, family:true, garbage_level:'little',
+    description:'宇治山田駅から神宮徴古館や古市の歴史的な町並みを歩くコース。',
+    start:'宇治山田駅', goal:'宇治山田駅',
+    startAddress:'岩渕2丁目, 三重県伊勢市', tagStatus:'estimated',
+    sourceUrl:'https://www.city.ise.mie.jp/_res/projects/default_project/_page_/001/002/500/45_walking_course.pdf'
+  },
+  {
+    id:'ise-067', courseNo:67, name:'二見・太江寺ウォーキングコース',
+    distance:4.2, time:60, difficulty:'normal',
+    purpose:['sightseeing','nature'], scenery:['shrine','sea'],
+    wheelchair:false, dog:false, family:true, garbage_level:'little',
+    description:'二見公民館を起点に太江寺周辺を巡る、寺社と海の景色が楽しめるコース。',
+    start:'二見公民館', goal:'二見公民館',
+    startAddress:'二見町, 三重県伊勢市', tagStatus:'estimated',
+    sourceUrl:'https://www.city.ise.mie.jp/_res/projects/default_project/_page_/001/002/500/67_walking_course.pdf'
+  },
+  {
+    id:'ise-044', courseNo:44, name:'河崎商人の町並みと神久コース',
+    distance:4.3, time:55, difficulty:'beginner',
+    purpose:['sightseeing','photo'], scenery:['town','river'],
+    wheelchair:true, dog:true, family:true, garbage_level:'little',
+    description:'伊勢市駅から河崎の商人蔵が並ぶレトロな町並みを歩くコース。',
+    start:'伊勢市駅', goal:'伊勢市駅',
+    startAddress:'河崎, 三重県伊勢市', tagStatus:'estimated',
+    sourceUrl:'https://www.city.ise.mie.jp/_res/projects/default_project/_page_/001/002/500/44_walking_course.pdf'
+  },
+  {
+    id:'ise-024', courseNo:24, name:'古市・桜木地蔵コース',
+    distance:4.4, time:60, difficulty:'normal',
+    purpose:['sightseeing','health'], scenery:['town','shrine'],
+    wheelchair:true, dog:false, family:true, garbage_level:'none',
+    description:'皇學館大学を起点に、古市の街道と桜木地蔵をめぐる歴史散策コース。',
+    start:'皇學館大学', goal:'皇學館大学',
+    startAddress:'皇學館大学, 三重県伊勢市', tagStatus:'estimated',
+    sourceUrl:'https://www.city.ise.mie.jp/_res/projects/default_project/_page_/001/002/500/24_walking_course.pdf'
+  },
+  {
+    id:'ise-018', courseNo:18, name:'大湊街中コース',
+    distance:4.5, time:60, difficulty:'beginner',
+    purpose:['sightseeing','health'], scenery:['town','sea'],
+    wheelchair:true, dog:true, family:true, garbage_level:'little',
+    description:'日保見山八幡宮を起点に、港町・大湊の街中を歩くコース。',
+    start:'日保見山八幡宮', goal:'日保見山八幡宮',
+    startAddress:'大湊町, 三重県伊勢市', tagStatus:'estimated',
+    sourceUrl:'https://www.city.ise.mie.jp/_res/projects/default_project/_page_/001/002/500/18_walking_course.pdf'
+  },
+  {
+    id:'ise-046', courseNo:46, name:'古市参宮街道（外宮～内宮）コース',
+    distance:4.6, time:60, difficulty:'beginner',
+    purpose:['sightseeing','photo','health'], scenery:['shrine','town'],
+    wheelchair:true, dog:false, family:true, garbage_level:'little',
+    description:'外宮から内宮まで、かつての参宮客で賑わった古市街道をたどる伊勢観光の王道コース。',
+    start:'外宮', goal:'内宮',
+    startAddress:'伊勢神宮外宮, 三重県伊勢市', tagStatus:'estimated',
+    sourceUrl:'https://www.city.ise.mie.jp/_res/projects/default_project/_page_/001/002/500/46_walking_course.pdf'
+  },
+  {
+    id:'ise-004', courseNo:4, name:'外宮さん周辺散歩道コース',
+    distance:4.8, time:62, difficulty:'normal',
+    purpose:['sightseeing','health'], scenery:['shrine','forest'],
+    wheelchair:true, dog:false, family:true, garbage_level:'little',
+    description:'外宮の杉木立と参道をめぐる、緑豊かな散歩コース。',
+    start:'福祉センター', goal:'外宮',
+    startAddress:'福祉センター, 三重県伊勢市', tagStatus:'estimated',
+    sourceUrl:'https://www.city.ise.mie.jp/_res/projects/default_project/_page_/001/002/500/04_walking_course.pdf'
+  },
+  {
+    id:'ise-012', courseNo:12, name:'御薗さわやか田園コース',
+    distance:5.1, time:60, difficulty:'normal',
+    purpose:['nature','health'], scenery:['town'],
+    wheelchair:false, dog:true, family:false, garbage_level:'none',
+    description:'ハートプラザみそのを起点に、御薗地区の田園風景の中を歩くコース。',
+    start:'ハートプラザみその', goal:'ハートプラザみその',
+    startAddress:'御薗町, 三重県伊勢市', tagStatus:'estimated',
+    sourceUrl:'https://www.city.ise.mie.jp/_res/projects/default_project/_page_/001/002/500/12_walking_course.pdf'
+  },
+  {
+    id:'ise-036', courseNo:36, name:'勢田川コース',
+    distance:5.2, time:60, difficulty:'normal',
+    purpose:['nature','health'], scenery:['river','town'],
+    wheelchair:true, dog:true, family:true, garbage_level:'little',
+    description:'一色渡船場跡碑を起点に勢田川沿いを歩く、水辺の風景が楽しめるコース。',
+    start:'一色渡船場跡碑', goal:'一色渡船場跡碑',
+    startAddress:'一色町, 三重県伊勢市', tagStatus:'estimated',
+    sourceUrl:'https://www.city.ise.mie.jp/_res/projects/default_project/_page_/001/002/500/36_walking_course.pdf'
+  },
+  {
+    id:'ise-041', courseNo:41, name:'潮風の道ショートコース',
+    distance:5.5, time:70, difficulty:'normal',
+    purpose:['nature','exercise','photo'], scenery:['sea'],
+    wheelchair:false, dog:true, family:true, garbage_level:'active',
+    description:'二見の海沿いを歩く「潮風の道」の短縮版。潮風とともに海岸線を歩ける。',
+    start:'二見公民館', goal:'二見公民館',
+    startAddress:'二見町, 三重県伊勢市', tagStatus:'estimated',
+    sourceUrl:'https://www.city.ise.mie.jp/_res/projects/default_project/_page_/001/002/500/41_walking_course.pdf'
+  },
+  {
+    id:'ise-001', courseNo:1, name:'潮風の道ロングコース',
+    distance:7.8, time:100, difficulty:'advanced',
+    purpose:['exercise','nature'], scenery:['sea'],
+    wheelchair:false, dog:true, family:false, garbage_level:'active',
+    description:'二見の海沿いを長く歩く本格コース。体力に自信がある方向け、海景色を存分に楽しめる。',
+    start:'二見公民館', goal:'二見公民館',
+    startAddress:'二見町, 三重県伊勢市', tagStatus:'estimated',
+    sourceUrl:'https://www.city.ise.mie.jp/_res/projects/default_project/_page_/001/002/500/01_walking_course.pdf'
+  },
+];
+
+/* =====================================================================
    判定の実行フロー（質問終了 → Firestore取得 → 判定 → 結果表示）
    ===================================================================== */
 async function runRecommendation(){
@@ -1053,15 +1294,21 @@ async function runRecommendation(){
     // ※ コース件数が多くなってきたら where() での事前絞り込みや
     //    ページングを検討する（現段階は全件取得を想定）。
     if(allCourses.length === 0){
-      const snap = await db.collection('walking_courses').get();
-      allCourses = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      try{
+        const snap = await db.collection('walking_courses').get();
+        allCourses = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      }catch(fetchErr){
+        console.warn('walking_courses の取得に失敗しました。フォールバックデータを使用します', fetchErr);
+        allCourses = [];
+      }
+      // Firestoreにまだコースが登録されていない場合は、同梱のサンプルコースを使用する。
+      // （Firestoreに1件でも登録されていれば、そちらのデータのみを使用する）
+      if(allCourses.length === 0){
+        allCourses = FALLBACK_COURSES;
+      }
     }
 
-    if(allCourses.length === 0){
-      rankedResults = [];
-    }else{
-      rankedResults = await recommendCourses(answers, allCourses);
-    }
+    rankedResults = await recommendCourses(answers, allCourses);
 
     renderResultScreen();
   }catch(err){
@@ -1203,168 +1450,93 @@ function openDetail(course){
   if(course.family) chips.push('家族向け');
   document.getElementById('detailChips').innerHTML = chips.map(c => `<div class="meta-chip">${escapeHtml(c)}</div>`).join('');
 
+  // 伊勢市公式データを元にした「仮タグ」コースには、出典と注記を表示する
+  const noteEl = document.getElementById('detailSourceNote');
+  if(noteEl){
+    if(course.tagStatus === 'estimated'){
+      const link = course.sourceUrl
+        ? `<a href="${escapeAttr(course.sourceUrl)}" target="_blank" rel="noopener">伊勢市公式コース情報（PDF）を見る</a>`
+        : '';
+      noteEl.innerHTML = `※このコースの目的・景色タグはAIによる推定（仮タグ）です。実際と異なる場合があります。${link}`;
+      noteEl.style.display = '';
+    }else{
+      noteEl.style.display = 'none';
+    }
+  }
+
   showScreen('screen-detail');
 }
-
-document.getElementById('startNavBtn').addEventListener('click', () => {
-  if(selectedCourse) openNav(selectedCourse);
-});
-
 
 /* =====================================================================
-   ナビ開始画面（Leaflet：ルート表示・GPS現在地表示）
+   ナビ導線：「ここナビで行く」「アプリ地図で見る」
+   ---------------------------------------------------------------------
+   自前でLeaflet地図・ルート・GPSを実装するのではなく、既存の仕組みに
+   乗せることで、実際のターン・バイ・ターン案内はGoogleマップに、
+   コースの位置確認は既存の map.html（クリーンマップ）に任せる方式。
+   これは map.html のゴミ発見ポップアップにある「ここナビ」リンク
+   （https://www.google.com/maps/dir/?api=1&destination=lat,lng）
+   と同じ考え方・同じURL形式に統一している。
    ===================================================================== */
-const navBackBtn   = document.getElementById('navBackBtn');
-const navHeaderTitle = document.getElementById('navHeaderTitle');
-const navSheetName = document.getElementById('navSheetName');
-const navSheetMeta = document.getElementById('navSheetMeta');
-const gpsToggleBtn = document.getElementById('gpsToggleBtn');
-const gpsBadge      = document.getElementById('gpsBadge');
-const gpsBadgeText  = document.getElementById('gpsBadgeText');
-const locateFab     = document.getElementById('locateFab');
-
-function openNav(course){
-  navHeaderTitle.textContent = course.name || 'ナビ開始';
-  navSheetName.textContent = course.name || '';
-  navSheetMeta.textContent = `距離 ${course.distance ?? '-'}km ／ 所要時間 ${course.time ?? '-'}分`;
-
-  showScreen('screen-nav');
-
-  // Leaflet地図の初期化は初回のみ（以降は既存インスタンスを再利用）
-  if(!navMap){
-    navMap = L.map('navMap', { zoomControl:false, attributionControl:true });
-    L.control.zoom({ position:'bottomright' }).addTo(navMap);
-    // 地理院タイル（まちみっけ／トレジャーシーカー伊勢の既存実装と同じソース）
-    L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png', {
-      maxZoom: 18,
-      attribution: '地理院タイル'
-    }).addTo(navMap);
-  }else{
-    // 前回のルートを消去してから再描画する
-    if(navRouteLayer){ navMap.removeLayer(navRouteLayer); navRouteLayer = null; }
-  }
-
-  drawCourseRoute(course);
-  stopGpsWatch(); // 別コースを開いたら一旦GPSはリセット
-}
 
 /**
- * コースのルート・スタート／ゴール地点を地図に描画する。
- * Firestoreの route フィールドは [{lat, lng}, ...] を想定。
- * route が無い場合は latitude/longitude（1点）のみをマーカー表示する。
+ * コースの目的地情報を取得する。
+ * 優先順： route最終地点(lat/lng) > latitude/longitude(lat/lng) > startAddress(住所文字列)
+ * ※86コース中、緯度経度を手入力で確認済みのコースはまだ少ないため、
+ *   多くは市公式データの地点名から作った住所文字列（startAddress）で
+ *   Googleマップの道案内を呼び出す設計にしている（tagStatus:'estimated'）。
  */
-function drawCourseRoute(course){
-  const points = [];
-
+function getCourseDestination(course){
   if(Array.isArray(course.route) && course.route.length > 0){
-    course.route.forEach(p => {
-      if(typeof p.lat === 'number' && typeof p.lng === 'number'){
-        points.push([p.lat, p.lng]);
-      }
-    });
+    const last = course.route[course.route.length - 1];
+    if(typeof last.lat === 'number' && typeof last.lng === 'number'){
+      return { lat:last.lat, lng:last.lng };
+    }
   }
+  if(typeof course.latitude === 'number' && typeof course.longitude === 'number'){
+    return { lat:course.latitude, lng:course.longitude };
+  }
+  if(course.startAddress){
+    return { address:course.startAddress };
+  }
+  return null;
+}
 
-  if(points.length >= 2){
-    navRouteLayer = L.layerGroup().addTo(navMap);
-    const line = L.polyline(points, { color:'#3E6B4F', weight:5, opacity:0.85 }).addTo(navRouteLayer);
+/** 目的地情報(lat/lng または address)からGoogleマップ道案内URLを組み立てる */
+function buildGoogleMapsDirUrl(dest){
+  if(!dest) return null;
+  if(typeof dest.lat === 'number' && typeof dest.lng === 'number'){
+    return `https://www.google.com/maps/dir/?api=1&destination=${dest.lat},${dest.lng}&travelmode=walking`;
+  }
+  if(dest.address){
+    return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(dest.address)}&travelmode=walking`;
+  }
+  return null;
+}
 
-    const startIcon = makeDivIcon('#B5502F', 'S');
-    const goalIcon   = makeDivIcon('#3E6B4F', 'G');
-    L.marker(points[0], { icon:startIcon }).addTo(navRouteLayer).bindPopup(course.start || 'スタート');
-    L.marker(points[points.length - 1], { icon:goalIcon }).addTo(navRouteLayer).bindPopup(course.goal || 'ゴール');
-
-    navMap.fitBounds(line.getBounds(), { padding:[40, 120] });
-  }else if(typeof course.latitude === 'number' && typeof course.longitude === 'number'){
-    navRouteLayer = L.layerGroup().addTo(navMap);
-    L.marker([course.latitude, course.longitude], { icon: makeDivIcon('#B5502F', 'S') })
-      .addTo(navRouteLayer)
-      .bindPopup(course.name || 'コース地点');
-    navMap.setView([course.latitude, course.longitude], 16);
-  }else{
-    // 位置情報が全く無い場合は伊勢市周辺をデフォルト表示
-    navMap.setView([34.489, 136.709], 13);
+document.getElementById('openGoogleMapsBtn').addEventListener('click', () => {
+  if(!selectedCourse) return;
+  const dest = getCourseDestination(selectedCourse);
+  const url = buildGoogleMapsDirUrl(dest);
+  if(!url){
     showToast('このコースには位置情報が登録されていません');
-  }
-
-  // Leafletはdisplay:noneの状態でinvalidateSizeせずに描画すると
-  // タイルが崩れるため、画面表示後にサイズを再計算する。
-  setTimeout(() => navMap && navMap.invalidateSize(), 80);
-}
-
-function makeDivIcon(color, letter){
-  return L.divIcon({
-    className:'',
-    html:`<div style="width:26px;height:26px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:${color};display:flex;align-items:center;justify-content:center;box-shadow:0 3px 8px rgba(0,0,0,0.3);">
-            <span style="transform:rotate(45deg);color:#fff;font-size:11px;font-weight:700;">${letter}</span>
-          </div>`,
-    iconSize:[26,26],
-    iconAnchor:[13,26]
-  });
-}
-
-/* ---- GPS現在地表示 ---- */
-function startGpsWatch(){
-  if(!navigator.geolocation){
-    showToast('この端末は位置情報に対応していません');
     return;
   }
-  gpsActive = true;
-  gpsBadge.className = 'gps-badge searching';
-  gpsBadgeText.textContent = '位置情報を取得中…';
-  gpsToggleBtn.innerHTML = `${iconSvg('x')}GPSを停止する`;
-
-  watchId = navigator.geolocation.watchPosition(
-    (pos) => {
-      const { latitude, longitude, accuracy } = pos.coords;
-      gpsBadge.className = 'gps-badge';
-      gpsBadgeText.textContent = '現在地を表示中';
-
-      if(!userMarker){
-        userMarker = L.circleMarker([latitude, longitude], {
-          radius:8, color:'#fff', weight:3, fillColor:'#2C4E3A', fillOpacity:1
-        }).addTo(navMap);
-        navMap.setView([latitude, longitude], 17);
-      }else{
-        userMarker.setLatLng([latitude, longitude]);
-      }
-    },
-    (err) => {
-      console.warn('GPS取得エラー', err);
-      gpsBadge.className = 'gps-badge off';
-      gpsBadgeText.textContent = 'GPS取得に失敗しました';
-      showToast('位置情報を取得できませんでした。設定をご確認ください。');
-    },
-    { enableHighAccuracy:true, maximumAge:3000, timeout:10000 }
-  );
-}
-
-function stopGpsWatch(){
-  gpsActive = false;
-  if(watchId !== null && navigator.geolocation){
-    navigator.geolocation.clearWatch(watchId);
-    watchId = null;
-  }
-  if(userMarker){ navMap && navMap.removeLayer(userMarker); userMarker = null; }
-  gpsBadge.className = 'gps-badge off';
-  gpsBadgeText.textContent = 'GPS停止中';
-  gpsToggleBtn.innerHTML = `${iconSvg('run')}GPSを開始する`;
-}
-
-gpsToggleBtn.addEventListener('click', () => {
-  if(gpsActive){ stopGpsWatch(); } else { startGpsWatch(); }
+  // map.html の「ここナビ」リンクと同一形式。現在地からの道案内はGoogleマップ側に任せる。
+  window.open(url, '_blank', 'noopener');
 });
 
-locateFab.addEventListener('click', () => {
-  if(userMarker){
-    navMap.setView(userMarker.getLatLng(), 17);
-  }else{
-    showToast('先にGPSを開始してください');
+document.getElementById('openAppMapBtn').addEventListener('click', () => {
+  if(!selectedCourse) return;
+  const dest = getCourseDestination(selectedCourse);
+  // アプリ内マップ（map.html）は緯度経度でのマーカー表示にのみ対応。
+  // 住所文字列しかないコース（多くの市公式コース）はGoogleマップ側に誘導する。
+  if(!dest || typeof dest.lat !== 'number'){
+    showToast('このコースはGoogleマップでご確認ください');
+    return;
   }
-});
-
-navBackBtn.addEventListener('click', () => {
-  stopGpsWatch();
-  showScreen('screen-detail');
+  // map.html は ?lat=..&lng=.. を受け取ると、その地点へ地図を移動して
+  // マーカーでハイライトする処理を既に持っている（履歴ページからの遷移と同じ仕組み）。
+  window.location.href = `map.html?lat=${dest.lat}&lng=${dest.lng}`;
 });
 
 
