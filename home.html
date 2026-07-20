@@ -185,6 +185,62 @@
   .cta.map .ico{background:var(--forest-soft); color:var(--forest);}
   .cta span{font-size:12px; font-weight:700;}
 
+  /* ---------- AIおすすめウォーキング 誘導カード ---------- */
+  .ai-promo{
+    display:flex;
+    align-items:center;
+    gap:14px;
+    margin-top:14px;
+    padding:16px 16px;
+    border-radius:18px;
+    background:linear-gradient(135deg, var(--forest) 0%, var(--forest-deep) 100%);
+    box-shadow:0 10px 22px rgba(44,78,58,0.22);
+    text-decoration:none;
+    color:#fff;
+    position:relative;
+    overflow:hidden;
+  }
+  .ai-promo::after{
+    content:"";
+    position:absolute; right:-24px; bottom:-24px;
+    width:110px; height:110px;
+    background:radial-gradient(circle, rgba(227,167,59,0.35), transparent 70%);
+  }
+  .ai-promo .ai-ico{
+    width:44px; height:44px; border-radius:50%;
+    background:rgba(255,255,255,0.18);
+    border:1px solid rgba(255,255,255,0.3);
+    display:flex; align-items:center; justify-content:center;
+    flex-shrink:0;
+    position:relative; z-index:1;
+  }
+  .ai-promo .ai-ico svg{width:22px; height:22px; color:var(--gold);}
+  .ai-promo .ai-text{flex:1; position:relative; z-index:1;}
+  .ai-promo .ai-text .ai-title{
+    font-family:"Kiwi Maru", serif;
+    font-weight:500;
+    font-size:15.5px;
+    display:flex; align-items:center; gap:6px;
+  }
+  .ai-promo .ai-text .ai-badge{
+    font-size:9.5px; font-weight:700;
+    background:var(--gold); color:var(--forest-deep);
+    padding:2px 6px; border-radius:20px;
+    letter-spacing:.02em;
+  }
+  .ai-promo .ai-text .ai-desc{
+    font-size:11.5px;
+    color:#E3ECE4;
+    margin-top:3px;
+  }
+  .ai-promo .ai-arrow{
+    flex-shrink:0; position:relative; z-index:1;
+    width:24px; height:24px;
+    display:flex; align-items:center; justify-content:center;
+    color:#fff;
+  }
+  .ai-promo .ai-arrow svg{width:16px; height:16px;}
+
   /* ---------- Bottom nav ---------- */
   nav.bottom{
     position:fixed;
@@ -292,6 +348,24 @@
         <span>クリーンマップ</span>
       </a>
     </div>
+
+    <!-- ▼▼ 追加機能：AIおすすめウォーキング への導線 ▼▼
+         6つの質問に答えると、ルールベースの判定エンジンが
+         walking_courses コレクションと照合しておすすめコースを提案する。
+         詳細画面 → ナビ開始（Leafletでルート表示＋GPS現在地表示）まで
+         walk-ai.html 側で完結する。 -->
+    <a class="ai-promo" href="walk-ai.html">
+      <div class="ai-ico">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l1.6 5.2L19 9l-5.4 1.8L12 16l-1.6-5.2L5 9l5.4-1.8L12 2z"/><path d="M19 14l.8 2.6L22 17.5l-2.2.9L19 21l-.8-2.6L16 17.5l2.2-.9L19 14z"/></svg>
+      </div>
+      <div class="ai-text">
+        <div class="ai-title">AIおすすめコース <span class="ai-badge">NEW</span></div>
+        <div class="ai-desc">かんたんな質問に答えるだけで、ぴったりのコースを提案</div>
+      </div>
+      <div class="ai-arrow">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+      </div>
+    </a>
   </main>
 
   <nav class="bottom">

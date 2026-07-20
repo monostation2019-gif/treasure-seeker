@@ -1,0 +1,1403 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>トレジャーシーカー伊勢 | AIおすすめウォーキング</title>
+
+<!-- ================================================================
+     Firebase（home.html / login.html と同一設定）
+     ================================================================ -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+<!-- ================================================================
+     Leaflet（ナビ画面の地図・ルート表示・現在地表示に使用）
+     ================================================================ -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Kiwi+Maru:wght@400;500&family=Noto+Sans+JP:wght@400;500;700;900&display=swap" rel="stylesheet">
+
+<style>
+  /* ==============================================================
+     デザイントークン：home.html と完全に同じ値を使用し、
+     アプリ全体のトンマナ（森グリーン × 鳥居朱 × 和紙クリーム）を維持する。
+     ============================================================== */
+  :root{
+    --forest:#3E6B4F;
+    --forest-deep:#2C4E3A;
+    --forest-soft:#EAF3EC;
+    --cream:#FBF8F0;
+    --card:#FFFFFF;
+    --torii:#B5502F;
+    --gold:#E3A73B;
+    --ink:#233127;
+    --ink-soft:#7A8A7D;
+    --line:#E7E2D4;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    font-family:"Noto Sans JP", sans-serif;
+    color:var(--ink);
+    background:var(--forest-soft);
+    display:flex;
+    justify-content:center;
+    overscroll-behavior-y:none;
+  }
+
+  .stage{
+    width:100%;
+    max-width:480px;
+    min-height:100vh;
+    min-height:100dvh;
+    background:var(--cream);
+    display:flex;
+    flex-direction:column;
+    position:relative;
+    overflow:hidden;
+  }
+
+  /* ---------- 共通ヘッダー（戻る・タイトル・進捗バー） ---------- */
+  header{
+    background:linear-gradient(155deg, var(--forest) 0%, var(--forest-deep) 100%);
+    padding:calc(env(safe-area-inset-top,0px) + 16px) 18px 18px;
+    border-radius:0 0 22px 22px;
+    color:#fff;
+    position:relative;
+    overflow:hidden;
+    flex-shrink:0;
+  }
+  header::after{
+    content:"";
+    position:absolute; right:-30px; top:-30px;
+    width:150px; height:150px;
+    background:radial-gradient(circle, rgba(255,255,255,0.14), transparent 70%);
+  }
+  .header-row{display:flex; align-items:center; gap:10px; position:relative; z-index:1;}
+  .back-btn{
+    width:32px; height:32px; border-radius:50%;
+    background:rgba(255,255,255,0.16);
+    border:1px solid rgba(255,255,255,0.28);
+    display:flex; align-items:center; justify-content:center;
+    color:#fff; flex-shrink:0; cursor:pointer;
+  }
+  .back-btn svg{width:16px; height:16px;}
+  .header-title{
+    font-family:"Kiwi Maru", serif;
+    font-weight:500;
+    font-size:17px;
+    flex:1;
+  }
+  .header-sub{font-size:11px; color:#D8E7DC; margin-top:2px;}
+
+  /* 進捗バー */
+  .progress-track{
+    margin-top:14px;
+    height:6px;
+    border-radius:6px;
+    background:rgba(255,255,255,0.22);
+    overflow:hidden;
+    position:relative; z-index:1;
+  }
+  .progress-fill{
+    height:100%;
+    border-radius:6px;
+    background:var(--gold);
+    width:0%;
+    transition:width .4s cubic-bezier(.4,0,.2,1);
+  }
+  .progress-label{
+    margin-top:6px;
+    font-size:10.5px;
+    color:#D8E7DC;
+    text-align:right;
+    position:relative; z-index:1;
+  }
+
+  main{
+    flex:1;
+    overflow-y:auto;
+    -webkit-overflow-scrolling:touch;
+    padding:18px 18px calc(env(safe-area-inset-bottom,0px) + 24px);
+  }
+
+  /* ---------- 画面切り替え（SPA方式） ---------- */
+  .screen{ display:none; }
+  .screen.active{ display:block; animation:fadeSlide .35s ease; }
+  @keyframes fadeSlide{
+    from{ opacity:0; transform:translateY(10px); }
+    to{ opacity:1; transform:translateY(0); }
+  }
+
+  /* ---------- 質問カード ---------- */
+  .q-card{
+    background:var(--card);
+    border-radius:20px;
+    padding:22px 18px;
+    box-shadow:0 10px 26px rgba(44,78,58,0.10);
+  }
+  .q-index{
+    font-size:12px; font-weight:700; color:var(--forest);
+    letter-spacing:.04em;
+  }
+  .q-text{
+    font-family:"Kiwi Maru", serif;
+    font-size:18px;
+    font-weight:500;
+    color:var(--ink);
+    margin:8px 0 18px;
+    line-height:1.5;
+  }
+  .opt-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:10px;
+  }
+  .opt-btn{
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:8px;
+    background:var(--forest-soft);
+    border:2px solid transparent;
+    border-radius:16px;
+    padding:16px 8px;
+    cursor:pointer;
+    color:var(--ink);
+    transition:transform .15s ease, border-color .15s ease, background .15s ease;
+    text-align:center;
+  }
+  .opt-btn .opt-ico{
+    width:30px; height:30px;
+    display:flex; align-items:center; justify-content:center;
+    color:var(--forest);
+  }
+  .opt-btn .opt-ico svg{width:22px; height:22px;}
+  .opt-btn span.opt-label{font-size:12.5px; font-weight:700;}
+  .opt-btn:active{ transform:scale(0.96); }
+  .opt-btn.selected{
+    background:#fff;
+    border-color:var(--forest);
+    box-shadow:0 6px 14px rgba(44,78,58,0.16);
+  }
+  .opt-btn.selected .opt-ico{ color:var(--torii); }
+
+  /* ---------- ナビゲーションボタン（次へ／戻る） ---------- */
+  .nav-btn-row{
+    display:flex; gap:10px;
+    margin-top:20px;
+  }
+  .btn{
+    flex:1;
+    border:none;
+    border-radius:14px;
+    padding:14px 10px;
+    font-size:14.5px;
+    font-weight:700;
+    font-family:"Noto Sans JP", sans-serif;
+    cursor:pointer;
+    display:flex; align-items:center; justify-content:center; gap:6px;
+    transition:opacity .15s ease, transform .1s ease;
+  }
+  .btn:active{ transform:scale(0.97); }
+  .btn-primary{
+    background:linear-gradient(135deg, var(--forest) 0%, var(--forest-deep) 100%);
+    color:#fff;
+    box-shadow:0 8px 18px rgba(44,78,58,0.22);
+  }
+  .btn-primary:disabled{
+    opacity:.4; box-shadow:none; cursor:not-allowed;
+  }
+  .btn-ghost{
+    background:var(--card);
+    color:var(--ink-soft);
+    border:1px solid var(--line);
+    flex:0 0 90px;
+  }
+  .btn-full{ width:100%; }
+  .btn svg{width:16px; height:16px;}
+
+  /* ---------- ローディング（結果算出中） ---------- */
+  .calc-wrap{
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding:70px 20px;
+    text-align:center;
+  }
+  .calc-leaf{
+    width:40px; height:40px;
+    border:4px solid #DDE7DD;
+    border-top-color:var(--forest);
+    border-radius:50%;
+    animation:spin .8s linear infinite;
+    margin-bottom:16px;
+  }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+  .calc-wrap p{ color:var(--ink-soft); font-size:13px; margin:2px 0; }
+  .calc-wrap .calc-title{ font-family:"Kiwi Maru", serif; font-size:16px; color:var(--ink); margin-bottom:4px; }
+
+  /* ---------- 結果一覧（おすすめ上位3件） ---------- */
+  .result-lead{
+    text-align:center;
+    margin-bottom:16px;
+  }
+  .result-lead .rl-title{
+    font-family:"Kiwi Maru", serif;
+    font-size:19px;
+    color:var(--ink);
+  }
+  .result-lead .rl-sub{
+    font-size:12px; color:var(--ink-soft); margin-top:4px;
+  }
+
+  .course-card{
+    background:var(--card);
+    border-radius:20px;
+    overflow:hidden;
+    box-shadow:0 10px 24px rgba(44,78,58,0.10);
+    margin-bottom:16px;
+    cursor:pointer;
+    position:relative;
+  }
+  .course-card .rank-tag{
+    position:absolute; left:12px; top:12px; z-index:2;
+    background:var(--forest-deep);
+    color:#fff;
+    font-size:11px; font-weight:700;
+    padding:4px 10px;
+    border-radius:20px;
+    box-shadow:0 4px 10px rgba(0,0,0,0.18);
+  }
+  .course-card .rank-tag.top{ background:var(--torii); }
+  .course-photo{
+    width:100%; height:140px;
+    object-fit:cover;
+    background:var(--forest-soft);
+    display:block;
+  }
+  .course-photo.noimg{
+    display:flex; align-items:center; justify-content:center;
+    color:var(--forest);
+  }
+  .course-photo.noimg svg{ width:34px; height:34px; opacity:.5; }
+  .course-body{ padding:14px 16px 16px; }
+  .stars{ display:flex; align-items:center; gap:2px; margin-bottom:6px; }
+  .stars svg{ width:14px; height:14px; }
+  .stars .star-on{ color:var(--gold); }
+  .stars .star-off{ color:var(--line); }
+  .match-pct{ font-size:11px; color:var(--forest); font-weight:700; margin-left:4px; }
+  .course-name{
+    font-family:"Kiwi Maru", serif;
+    font-size:16.5px;
+    color:var(--ink);
+    margin-bottom:6px;
+  }
+  .course-meta{
+    display:flex; flex-wrap:wrap; gap:6px;
+    margin-bottom:8px;
+  }
+  .meta-chip{
+    display:flex; align-items:center; gap:4px;
+    background:var(--forest-soft);
+    color:var(--forest-deep);
+    font-size:11px; font-weight:700;
+    padding:4px 9px;
+    border-radius:20px;
+  }
+  .meta-chip svg{ width:12px; height:12px; }
+  .meta-chip.garbage{ background:#FCEFE3; color:var(--torii); }
+  .course-desc{
+    font-size:12.5px; color:var(--ink-soft); line-height:1.6;
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
+  }
+  .course-cta{
+    margin-top:12px;
+    width:100%;
+    background:var(--forest-soft);
+    color:var(--forest-deep);
+    border:none;
+    border-radius:12px;
+    padding:11px;
+    font-size:13px; font-weight:700;
+    display:flex; align-items:center; justify-content:center; gap:6px;
+  }
+  .course-cta svg{ width:14px; height:14px; }
+
+  .empty-result{
+    text-align:center; padding:50px 16px; color:var(--ink-soft); font-size:13px;
+  }
+
+  .retry-link{
+    display:block; text-align:center;
+    margin-top:6px;
+    font-size:12.5px; color:var(--forest); font-weight:700;
+    text-decoration:none;
+  }
+
+  /* ---------- コース詳細 ---------- */
+  .detail-photo{
+    width:100%; height:200px; object-fit:cover;
+    border-radius:20px;
+    background:var(--forest-soft);
+    margin-bottom:16px;
+  }
+  .detail-photo.noimg{
+    display:flex; align-items:center; justify-content:center; color:var(--forest);
+  }
+  .detail-photo.noimg svg{ width:44px; height:44px; opacity:.5; }
+  .detail-title{
+    font-family:"Kiwi Maru", serif;
+    font-size:21px;
+    color:var(--ink);
+    margin-bottom:8px;
+  }
+  .detail-stats{
+    display:grid;
+    grid-template-columns:repeat(3, 1fr);
+    gap:10px;
+    background:var(--card);
+    border-radius:16px;
+    padding:14px 8px;
+    box-shadow:0 6px 16px rgba(44,78,58,0.08);
+    margin-bottom:16px;
+  }
+  .detail-stat{ text-align:center; }
+  .detail-stat .ds-num{
+    font-family:"Kiwi Maru", serif;
+    font-size:17px; color:var(--forest-deep);
+  }
+  .detail-stat .ds-label{ font-size:10.5px; color:var(--ink-soft); margin-top:3px; }
+  .detail-section-title{
+    font-size:12.5px; font-weight:700; color:var(--ink-soft);
+    letter-spacing:.03em;
+    margin:18px 2px 8px;
+  }
+  .detail-desc{
+    background:var(--card);
+    border-radius:16px;
+    padding:14px 16px;
+    font-size:13.5px; line-height:1.8; color:var(--ink);
+    box-shadow:0 6px 16px rgba(44,78,58,0.06);
+  }
+  .detail-tags{ display:flex; flex-wrap:wrap; gap:8px; }
+
+  /* ---------- ナビ開始（Leaflet地図） ---------- */
+  #navMap{
+    width:100%; height:100%;
+    border-radius:0;
+  }
+  .nav-map-wrap{
+    position:absolute; inset:0;
+  }
+  .nav-info-sheet{
+    position:absolute; left:0; right:0; bottom:0;
+    background:var(--card);
+    border-radius:22px 22px 0 0;
+    box-shadow:0 -8px 24px rgba(0,0,0,0.14);
+    padding:16px 18px calc(env(safe-area-inset-bottom,0px) + 16px);
+    z-index:5;
+  }
+  .nav-info-title{
+    font-family:"Kiwi Maru", serif;
+    font-size:15.5px; color:var(--ink);
+    margin-bottom:4px;
+  }
+  .nav-info-meta{ font-size:12px; color:var(--ink-soft); margin-bottom:12px; }
+  .locate-fab{
+    position:absolute; right:14px; z-index:5;
+    width:44px; height:44px; border-radius:50%;
+    background:var(--card);
+    box-shadow:0 6px 16px rgba(0,0,0,0.18);
+    display:flex; align-items:center; justify-content:center;
+    color:var(--forest-deep);
+    border:none;
+  }
+  .locate-fab svg{ width:20px; height:20px; }
+  .gps-badge{
+    position:absolute; left:14px; z-index:5;
+    background:rgba(44,78,58,0.88);
+    color:#fff; font-size:11px; font-weight:700;
+    padding:6px 12px; border-radius:20px;
+    display:flex; align-items:center; gap:6px;
+  }
+  .gps-badge .dot{
+    width:7px; height:7px; border-radius:50%;
+    background:#7CD98B;
+  }
+  .gps-badge.off .dot{ background:#C6C6C6; }
+  .gps-badge.searching .dot{ background:var(--gold); animation:pulse 1s infinite; }
+  @keyframes pulse{ 50%{ opacity:.3; } }
+
+  /* #screen-nav 専用：main の通常パディングを外してフル画面地図にする */
+  #screen-nav.active{
+    position:absolute; inset:0; top:0;
+    z-index:20;
+    background:var(--cream);
+  }
+  #screen-nav .nav-header{
+    position:absolute; top:0; left:0; right:0; z-index:6;
+    padding:calc(env(safe-area-inset-top,0px) + 14px) 16px 40px;
+    background:linear-gradient(180deg, rgba(0,0,0,0.42), transparent);
+    display:flex; align-items:center; gap:10px;
+  }
+  #screen-nav .nav-header .back-btn{ background:rgba(255,255,255,0.85); color:var(--forest-deep); border-color:transparent; }
+  #screen-nav .nav-header .nav-header-title{ color:#fff; font-family:"Kiwi Maru", serif; font-size:15px; }
+
+  .toast{
+    position:fixed; left:50%; bottom:26px; transform:translateX(-50%);
+    background:rgba(35,49,39,0.92); color:#fff;
+    font-size:12.5px; padding:10px 18px; border-radius:30px;
+    z-index:99; opacity:0; pointer-events:none;
+    transition:opacity .25s ease;
+  }
+  .toast.show{ opacity:1; }
+
+  /* ---------- ローディングオーバーレイ（初期認証待ち） ---------- */
+  .loading-overlay{
+    position:fixed; inset:0; z-index:99;
+    background:var(--cream);
+    display:flex; align-items:center; justify-content:center;
+    flex-direction:column; gap:10px;
+    transition:opacity .35s ease;
+  }
+  .loading-overlay .leaf{
+    width:30px; height:30px;
+    border:3px solid #DDE7DD;
+    border-top-color:var(--forest);
+    border-radius:50%;
+    animation:spin .8s linear infinite;
+  }
+  .loading-overlay p{color:var(--ink-soft); font-size:13px; margin:0;}
+</style>
+</head>
+<body>
+
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="leaf"></div>
+  <p>読み込み中…</p>
+</div>
+
+<div class="stage" id="stage">
+
+  <!-- ============================================================
+       共通ヘッダー（質問画面・結果画面・詳細画面で共有。ナビ画面のみ専用ヘッダー）
+       ============================================================ -->
+  <header id="mainHeader">
+    <div class="header-row">
+      <div class="back-btn" id="headerBackBtn" title="戻る">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+      </div>
+      <div>
+        <div class="header-title" id="headerTitle">AIおすすめウォーキング</div>
+        <div class="header-sub" id="headerSub">質問に答えてぴったりのコースを見つけよう</div>
+      </div>
+    </div>
+    <div class="progress-track" id="progressTrack">
+      <div class="progress-fill" id="progressFill"></div>
+    </div>
+    <div class="progress-label" id="progressLabel">質問 1 / 6</div>
+  </header>
+
+  <main id="mainArea">
+
+    <!-- ==========================================================
+         画面1：質問カード（質問1〜6を1枚ずつ、スワイプ感覚で切り替え）
+         ========================================================== -->
+    <section class="screen active" id="screen-question">
+      <div class="q-card">
+        <div class="q-index" id="qIndexLabel">質問 1</div>
+        <div class="q-text" id="qTextLabel">今日は何が目的ですか？</div>
+        <div class="opt-grid" id="qOptionsGrid"><!-- JSで動的生成 --></div>
+      </div>
+
+      <div class="nav-btn-row">
+        <button class="btn btn-ghost" id="qBackBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+          戻る
+        </button>
+        <button class="btn btn-primary" id="qNextBtn" disabled>
+          次へ
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+        </button>
+      </div>
+    </section>
+
+    <!-- ==========================================================
+         画面2：算出中（ルールベース判定のローディング表現）
+         ========================================================== -->
+    <section class="screen" id="screen-calc">
+      <div class="calc-wrap">
+        <div class="calc-leaf"></div>
+        <div class="calc-title">コースを探しています…</div>
+        <p>回答内容と登録コースを照合しています</p>
+      </div>
+    </section>
+
+    <!-- ==========================================================
+         画面3：おすすめ結果（上位3件）
+         ========================================================== -->
+    <section class="screen" id="screen-result">
+      <div class="result-lead">
+        <div class="rl-title">あなたへのおすすめコース</div>
+        <div class="rl-sub">回答内容にもとづく一致度の高い順に表示しています</div>
+      </div>
+      <div id="resultList"><!-- JSで動的生成 --></div>
+      <a href="#" class="retry-link" id="retryLink">もう一度質問に答える</a>
+    </section>
+
+    <!-- ==========================================================
+         画面4：コース詳細
+         ========================================================== -->
+    <section class="screen" id="screen-detail">
+      <div id="detailPhotoWrap"></div>
+      <div class="detail-title" id="detailName"></div>
+      <div class="course-meta" id="detailChips" style="margin-bottom:16px;"></div>
+
+      <div class="detail-stats">
+        <div class="detail-stat">
+          <div class="ds-num" id="detailDistance">-</div>
+          <div class="ds-label">距離</div>
+        </div>
+        <div class="detail-stat">
+          <div class="ds-num" id="detailTime">-</div>
+          <div class="ds-label">所要時間</div>
+        </div>
+        <div class="detail-stat">
+          <div class="ds-num" id="detailDifficulty">-</div>
+          <div class="ds-label">難易度</div>
+        </div>
+      </div>
+
+      <div class="detail-section-title">コースについて</div>
+      <div class="detail-desc" id="detailDesc"></div>
+
+      <div class="nav-btn-row">
+        <button class="btn btn-primary btn-full" id="startNavBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l19-9-9 19-2-8-8-2z"/></svg>
+          このコースへ行く（ナビ開始）
+        </button>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ============================================================
+       画面5：ナビ開始（Leaflet地図・ルート表示・GPS現在地）
+       main の外に置き、position:fixed 相当のフル画面表示にする
+       ============================================================ -->
+  <section class="screen" id="screen-nav">
+    <div class="nav-header">
+      <div class="back-btn" id="navBackBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+      </div>
+      <div class="nav-header-title" id="navHeaderTitle">ナビ開始</div>
+    </div>
+    <div class="nav-map-wrap">
+      <div id="navMap"></div>
+      <div class="gps-badge off" id="gpsBadge"><span class="dot"></span><span id="gpsBadgeText">GPS停止中</span></div>
+      <button class="locate-fab" id="locateFab" style="bottom:150px;" title="現在地へ移動">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
+      </button>
+      <div class="nav-info-sheet">
+        <div class="nav-info-title" id="navSheetName">コース名</div>
+        <div class="nav-info-meta" id="navSheetMeta">距離 / 時間</div>
+        <button class="btn btn-primary btn-full" id="gpsToggleBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2C8 2 5 5 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-4-3-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>
+          GPSを開始する
+        </button>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* =====================================================================
+   Firebase 初期化（home.html / login.html と同じ設定）
+   ===================================================================== */
+const firebaseConfig = {
+  apiKey: "AIzaSyB7f8QThoqYc-iDuMhKqp3MGBRAhln9ZhI",
+  authDomain: "treasure-seeker-ise.firebaseapp.com",
+  projectId: "treasure-seeker-ise",
+  storageBucket: "treasure-seeker-ise.firebasestorage.app",
+  messagingSenderId: "278199675502",
+  appId: "1:278199675502:web:295dfa975a03707f27947f"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+const LOGIN_PAGE = "login.html";
+const HOME_PAGE  = "home.html";
+
+/* =====================================================================
+   質問データ定義
+   ---------------------------------------------------------------------
+   ・id       : 回答を保存するキー（Firestoreコース側フィールドと対応させる）
+   ・text     : 質問文
+   ・options  : 選択肢（value = 判定ロジックで使う内部値 / label = 表示名）
+   質問を増減・変更したい場合は、この配列と後述の SCORING 設定だけを
+   編集すればよいように設計している（HTML/CSSは触らなくてよい）。
+   ===================================================================== */
+const QUESTIONS = [
+  {
+    id: 'purpose',
+    text: '今日は何が目的ですか？',
+    options: [
+      { value:'health',   label:'健康',     icon:'heart' },
+      { value:'garbage',  label:'ゴミ拾い', icon:'trash' },
+      { value:'sightseeing', label:'観光',  icon:'flag' },
+      { value:'photo',    label:'写真撮影', icon:'camera' },
+      { value:'nature',   label:'自然観察', icon:'leaf' },
+      { value:'exercise', label:'運動',     icon:'run' },
+      { value:'dogwalk',  label:'犬の散歩', icon:'paw' },
+    ]
+  },
+  {
+    id: 'time',
+    text: '歩く時間はどれくらいですか？',
+    options: [
+      { value:15,  label:'15分',     icon:'clock' },
+      { value:30,  label:'30分',     icon:'clock' },
+      { value:60,  label:'60分',     icon:'clock' },
+      { value:90,  label:'90分',     icon:'clock' },
+      { value:120, label:'120分以上', icon:'clock' },
+    ]
+  },
+  {
+    id: 'stamina',
+    text: '体力はどれくらいですか？',
+    options: [
+      { value:'beginner',   label:'初心者', icon:'star1' },
+      { value:'normal',     label:'普通',   icon:'star2' },
+      { value:'advanced',   label:'上級',   icon:'star3' },
+    ]
+  },
+  {
+    id: 'companion',
+    text: '一緒に歩く人は誰ですか？',
+    options: [
+      { value:'alone',      label:'一人',     icon:'user' },
+      { value:'family',     label:'家族',     icon:'family' },
+      { value:'kids',       label:'子ども',   icon:'kid' },
+      { value:'senior',     label:'高齢者',   icon:'senior' },
+      { value:'dog',        label:'犬',       icon:'paw' },
+      { value:'wheelchair', label:'車椅子',   icon:'wheelchair' },
+      { value:'stroller',   label:'ベビーカー', icon:'stroller' },
+    ]
+  },
+  {
+    id: 'scenery',
+    text: 'どんな景色が見たいですか？',
+    options: [
+      { value:'sea',    label:'海',   icon:'wave' },
+      { value:'river',  label:'川',   icon:'river' },
+      { value:'shrine', label:'神社', icon:'torii' },
+      { value:'forest', label:'森林', icon:'leaf' },
+      { value:'town',   label:'町並み', icon:'town' },
+      { value:'flower', label:'花',   icon:'flower' },
+      { value:'autumn', label:'紅葉', icon:'autumn' },
+    ]
+  },
+  {
+    id: 'garbageLevel',
+    text: 'ゴミ拾いはしますか？',
+    options: [
+      { value:'none',   label:'しない', icon:'x' },
+      { value:'little', label:'少し',   icon:'trashSmall' },
+      { value:'active', label:'積極的', icon:'trash' },
+    ]
+  },
+];
+
+/* アイコンSVGの中身（strokeはcurrentColorで opt-btn 側の色を継承） */
+const ICONS = {
+  heart:'<path d="M12 21s-7-4.5-9.5-9C.9 8.5 2 5 5.5 5 8 5 9.5 7 12 9.5 14.5 7 16 5 18.5 5 22 5 23.1 8.5 21.5 12c-2.5 4.5-9.5 9-9.5 9z"/>',
+  trash:'<path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m2 0-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6h14z"/>',
+  trashSmall:'<path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m2 0-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6h14z"/><path d="M10 11v6M14 11v6" stroke-width="1.4"/>',
+  flag:'<path d="M4 21V4m0 1h13l-3 4 3 4H4"/>',
+  camera:'<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.2"/>',
+  leaf:'<path d="M11 21c-4-1-8-5-8-11 6 0 10 4 11 8 3-6 8-8 10-8 0 8-6 14-13 11z"/>',
+  run:'<circle cx="14" cy="4.5" r="1.8"/><path d="M6 21l3-6 3 2 2-4-3-3-4 1.5M11 13l4 2 3 5"/>',
+  paw:'<circle cx="6" cy="10" r="1.7"/><circle cx="10" cy="7" r="1.7"/><circle cx="14" cy="7" r="1.7"/><circle cx="18" cy="10" r="1.7"/><path d="M8 17c0-3 2-5 4-5s4 2 4 5-2 3-4 3-4 0-4-3z"/>',
+  clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/>',
+  star1:'<path d="M12 3l2.5 5.5L20 9l-4 4 1 6-5-3-5 3 1-6-4-4 5.5-.5z"/>',
+  star2:'<path d="M12 3l2.2 4.8L19.5 8l-3.6 3.5.9 5.3L12 14.3l-4.8 2.5.9-5.3L4.5 8l5.3-.2z"/><path d="M12 3l2.2 4.8" opacity="0"/>',
+  star3:'<path d="M12 2l2 4.5L19 7l-3.4 3.3.8 4.9L12 12.8 7.6 15.2l.8-4.9L5 7l5-.5z"/>',
+  user:'<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/>',
+  family:'<circle cx="8" cy="8" r="2.6"/><circle cx="16" cy="8" r="2.6"/><path d="M2 21c0-3.2 2.6-5.4 6-5.4s6 2.2 6 5.4M12 21c0-3.2 2.6-5.4 6-5.4s6 2.2 6 5.4" transform="translate(-1,0)"/>',
+  kid:'<circle cx="12" cy="7" r="3"/><path d="M6 21c0-3.5 2.7-6 6-6s6 2.5 6 6"/>',
+  senior:'<circle cx="12" cy="7" r="3"/><path d="M5 21c0-3.5 3-6 7-6s7 2.5 7 6M9 15l-1 3M15 15l1 3"/>',
+  wheelchair:'<circle cx="9" cy="16" r="4"/><circle cx="6" cy="5" r="1.6"/><path d="M9 16 9 9h6l3 7M9 9 7 3"/>',
+  stroller:'<circle cx="8" cy="19" r="1.8"/><circle cx="16" cy="19" r="1.8"/><path d="M4 19h1M9 19h6M6 8h9l2 8H8L6 8z"/><path d="M6 8c0-3 2-5 5-5"/>',
+  wave:'<path d="M2 15c2-2 4-2 6 0s4 2 6 0 4-2 6 0M2 20c2-2 4-2 6 0s4 2 6 0 4-2 6 0"/>',
+  river:'<path d="M3 8c3 0 3 3 6 3s3-3 6-3 3 3 6 3M3 15c3 0 3 3 6 3s3-3 6-3 3 3 6 3"/>',
+  torii:'<path d="M3 7h18M5 7v13M19 7v13M2 4h20M8 11h8"/>',
+  town:'<path d="M3 21V9l5-4 5 4v12M13 21V6l5-3 3 3v15M3 21h18"/>',
+  flower:'<circle cx="12" cy="12" r="2.4"/><circle cx="12" cy="6" r="2.4"/><circle cx="12" cy="18" r="2.4"/><circle cx="6" cy="12" r="2.4"/><circle cx="18" cy="12" r="2.4"/>',
+  autumn:'<path d="M12 2c1 3-1 5 0 8 3-2 5 0 8 1-2 2-2 4 0 6-3-1-5 1-8 4-1-3 1-5 0-8-3 2-5 0-8-1 2-2 2-4 0-6 3 1 5-1 8-4z"/>',
+  x:'<path d="M6 6l12 12M18 6L6 18"/>',
+};
+function iconSvg(name){
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[name] || ICONS['leaf']}</svg>`;
+}
+
+/* =====================================================================
+   状態管理
+   ===================================================================== */
+let currentQIndex = 0;          // 現在の質問インデックス（0〜5）
+const answers = {};             // { purpose:'health', time:30, ... }
+let currentUser = null;
+let allCourses = [];            // Firestoreから取得した全コース
+let rankedResults = [];         // 判定後の上位3件（スコア付き）
+let selectedCourse = null;      // 詳細/ナビで表示中のコース
+
+/* ナビ画面用 */
+let navMap = null;
+let navRouteLayer = null;
+let userMarker = null;
+let watchId = null;
+let gpsActive = false;
+
+/* =====================================================================
+   要素参照
+   ===================================================================== */
+const overlay        = document.getElementById('loadingOverlay');
+const headerTitle     = document.getElementById('headerTitle');
+const headerSub       = document.getElementById('headerSub');
+const headerBackBtn   = document.getElementById('headerBackBtn');
+const progressTrack   = document.getElementById('progressTrack');
+const progressFill    = document.getElementById('progressFill');
+const progressLabel   = document.getElementById('progressLabel');
+
+const qIndexLabel     = document.getElementById('qIndexLabel');
+const qTextLabel      = document.getElementById('qTextLabel');
+const qOptionsGrid    = document.getElementById('qOptionsGrid');
+const qBackBtn        = document.getElementById('qBackBtn');
+const qNextBtn        = document.getElementById('qNextBtn');
+
+const resultList      = document.getElementById('resultList');
+const retryLink       = document.getElementById('retryLink');
+
+const toastEl         = document.getElementById('toast');
+
+/* =====================================================================
+   画面遷移ユーティリティ
+   ===================================================================== */
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+
+  // ナビ画面はヘッダー／進捗バーを隠す（専用ヘッダーを使うため）
+  const isNav = (id === 'screen-nav');
+  document.getElementById('mainHeader').style.display = isNav ? 'none' : '';
+}
+
+function showToast(msg){
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  setTimeout(() => toastEl.classList.remove('show'), 2200);
+}
+
+/* =====================================================================
+   質問画面の描画
+   ===================================================================== */
+function renderQuestion(){
+  const q = QUESTIONS[currentQIndex];
+
+  headerTitle.textContent = 'AIおすすめウォーキング';
+  headerSub.textContent = '質問に答えてぴったりのコースを見つけよう';
+
+  qIndexLabel.textContent = `質問 ${currentQIndex + 1}`;
+  qTextLabel.textContent = q.text;
+
+  const pct = ((currentQIndex) / QUESTIONS.length) * 100;
+  progressFill.style.width = pct + '%';
+  progressLabel.textContent = `質問 ${currentQIndex + 1} / ${QUESTIONS.length}`;
+
+  qOptionsGrid.innerHTML = q.options.map(opt => {
+    const selected = answers[q.id] === opt.value;
+    return `
+      <button type="button" class="opt-btn ${selected ? 'selected' : ''}" data-value="${escapeAttr(opt.value)}">
+        <div class="opt-ico">${iconSvg(opt.icon)}</div>
+        <span class="opt-label">${escapeHtml(opt.label)}</span>
+      </button>
+    `;
+  }).join('');
+
+  // 選択肢クリック
+  qOptionsGrid.querySelectorAll('.opt-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      // valueは元々の型（数値 or 文字列）に戻して保存する
+      const raw = btn.dataset.value;
+      const matchedOpt = q.options.find(o => String(o.value) === raw);
+      answers[q.id] = matchedOpt.value;
+      renderQuestion(); // 選択状態を反映して再描画
+    });
+  });
+
+  qNextBtn.disabled = (answers[q.id] === undefined);
+  qNextBtn.textContent = ''; // 一旦クリアしてから中身を再構築
+  qNextBtn.innerHTML = (currentQIndex === QUESTIONS.length - 1)
+    ? '結果を見る <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>'
+    : '次へ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>';
+
+  showScreen('screen-question');
+}
+
+qNextBtn.addEventListener('click', () => {
+  if(currentQIndex < QUESTIONS.length - 1){
+    currentQIndex++;
+    renderQuestion();
+  }else{
+    // 最終質問 → 判定処理へ
+    runRecommendation();
+  }
+});
+
+qBackBtn.addEventListener('click', () => {
+  if(currentQIndex > 0){
+    currentQIndex--;
+    renderQuestion();
+  }else{
+    // 最初の質問で戻る → ホームへ
+    window.location.href = HOME_PAGE;
+  }
+});
+
+/* ヘッダーの戻るボタン（質問画面／結果画面／詳細画面で共通利用） */
+headerBackBtn.addEventListener('click', () => {
+  const activeScreen = document.querySelector('.screen.active').id;
+  if(activeScreen === 'screen-question'){
+    qBackBtn.click();
+  }else if(activeScreen === 'screen-result'){
+    // 結果画面から戻る＝質問をやり直す
+    resetQuiz();
+  }else if(activeScreen === 'screen-detail'){
+    renderResultScreen(); // 詳細→結果一覧に戻る
+  }else{
+    window.location.href = HOME_PAGE;
+  }
+});
+
+function resetQuiz(){
+  currentQIndex = 0;
+  Object.keys(answers).forEach(k => delete answers[k]);
+  renderQuestion();
+}
+retryLink.addEventListener('click', (e) => { e.preventDefault(); resetQuiz(); });
+
+
+/* =====================================================================
+   ★★★ 判定エンジン（ルールベース） ★★★
+   ---------------------------------------------------------------------
+   将来的に生成AI（OpenAI API等）へ置き換えられるよう、
+   「回答(answers) と コース一覧(courses) を受け取り、
+     スコア付きのおすすめ配列を返す」という関数インターフェースに
+   処理を閉じ込めている。
+
+   ・現在   : RECOMMEND_ENGINE = 'rule'   → ruleBasedRecommend() を使用
+   ・将来   : RECOMMEND_ENGINE = 'openai' → aiRecommend() に差し替え可能
+              （aiRecommend は同じ引数・同じ戻り値の形にして実装すればよい）
+   ===================================================================== */
+const RECOMMEND_ENGINE = 'rule'; // 'rule' | 'openai'（将来用。現状は'rule'固定）
+
+/**
+ * ルールベース判定のスコア配点。
+ * 合計が100点になるよう設計し、一致率(%)としてそのまま表示できるようにする。
+ */
+const SCORE_WEIGHTS = {
+  purpose:  30, // 目的の一致
+  time:     25, // 所要時間の近さ
+  stamina:  15, // 体力・難易度の一致
+  companion:15, // 同行者との相性
+  scenery:  10, // 見たい景色の一致
+  garbage:   5, // ゴミ拾いレベルの一致
+};
+
+/* 体力(stamina)と難易度(difficulty)のマッピング。近い段階ほど部分点を与える */
+const STAMINA_LEVEL = { beginner:1, normal:2, advanced:3, '初心者':1, '普通':2, '上級':3 };
+
+/**
+ * コース1件に対して回答とのスコアを算出する。
+ * @param {Object} a 回答（answers）
+ * @param {Object} c walking_courses の1ドキュメント（idを含む）
+ * @returns {number} 0〜100 のスコア
+ */
+function scoreCourse(a, c){
+  let score = 0;
+
+  // ---- 目的 (purpose) ----
+  // courseの purpose は 単一値 or 配列 のどちらでも受け付ける
+  const coursePurposes = toArray(c.purpose);
+  if(a.purpose && coursePurposes.includes(a.purpose)){
+    score += SCORE_WEIGHTS.purpose;
+  }
+
+  // ---- 時間 (time) ----
+  // 選択した分数とコースの time(分) の差が小さいほど高得点。
+  // 差0分=満点、差60分以上=0点として線形に減点する。
+  if(typeof c.time === 'number' && typeof a.time === 'number'){
+    const diff = Math.abs(c.time - a.time);
+    const ratio = Math.max(0, 1 - diff / 60);
+    score += SCORE_WEIGHTS.time * ratio;
+  }
+
+  // ---- 体力・難易度 (stamina / difficulty) ----
+  const wantLv = STAMINA_LEVEL[a.stamina];
+  const courseLv = STAMINA_LEVEL[c.difficulty];
+  if(wantLv && courseLv){
+    const lvDiff = Math.abs(wantLv - courseLv);
+    // 完全一致=満点、1段階差=半分、2段階差=0点
+    const ratio = lvDiff === 0 ? 1 : (lvDiff === 1 ? 0.5 : 0);
+    score += SCORE_WEIGHTS.stamina * ratio;
+  }
+
+  // ---- 同行者 (companion) ----
+  // 車椅子・犬・ベビーカー・家族・高齢者など、コース側の対応フラグと照合。
+  // 「一人」はどのコースでも歩けるとみなし満点を与える。
+  score += SCORE_WEIGHTS.companion * companionMatchRatio(a.companion, c);
+
+  // ---- 景色 (scenery) ----
+  const courseScenery = toArray(c.scenery);
+  if(a.scenery && courseScenery.includes(a.scenery)){
+    score += SCORE_WEIGHTS.scenery;
+  }
+
+  // ---- ゴミ拾い (garbage_level) ----
+  if(a.garbageLevel && c.garbage_level){
+    if(a.garbageLevel === c.garbage_level){
+      score += SCORE_WEIGHTS.garbage;
+    }else if(
+      // 「少し」は「しない」「積極的」いずれとも半分だけ相性ありとする
+      a.garbageLevel === 'little' || c.garbage_level === 'little'
+    ){
+      score += SCORE_WEIGHTS.garbage * 0.5;
+    }
+  }
+
+  return Math.round(Math.min(100, score));
+}
+
+/* 同行者フィールドとの適合率(0〜1)を返す */
+function companionMatchRatio(companion, c){
+  if(!companion) return 0;
+  if(companion === 'alone') return 1; // 一人はどのコースでもOK扱い
+
+  const flagMap = {
+    wheelchair: c.wheelchair === true,
+    dog:        c.dog === true,
+    family:     c.family === true,
+    kids:       c.family === true, // 子どもはfamily対応コースを流用
+    senior:     c.family === true || c.wheelchair === true,
+    stroller:   c.wheelchair === true, // ベビーカーはバリアフリー(wheelchair対応)コースと相性が良い
+  };
+  return flagMap[companion] ? 1 : 0.3; // 非対応でも「歩けなくはない」ため最低点は残す
+}
+
+function toArray(v){
+  if(v === undefined || v === null) return [];
+  return Array.isArray(v) ? v : [v];
+}
+
+/**
+ * ルールベース判定：回答に対して全コースをスコアリングし、上位3件を返す。
+ */
+function ruleBasedRecommend(a, courses){
+  return courses
+    .map(c => ({ course:c, score:scoreCourse(a, c) }))
+    .sort((x, y) => y.score - x.score)
+    .slice(0, 3);
+}
+
+/**
+ * 【将来用スタブ】生成AI（OpenAI API等）による判定に差し替える場合のインターフェース例。
+ * 実装時は、質問回答とコース一覧（または要約）をプロンプトに含めて、
+ * 同じ形（[{course, score}, ...]）を返すように実装すればよい。
+ * ※ 現状は未使用（呼び出されない）。
+ */
+async function aiRecommend(a, courses){
+  // 例）
+  // const res = await fetch('https://api.openai.com/v1/chat/completions', { ... });
+  // ...レスポンスをパースして [{course, score}] 形式に変換して return する
+  throw new Error('aiRecommend() は未実装です。RECOMMEND_ENGINE を "rule" のままにしてください。');
+}
+
+/**
+ * 判定エンジンの入り口（切り替え用ディスパッチャ）。
+ */
+async function recommendCourses(a, courses){
+  if(RECOMMEND_ENGINE === 'openai'){
+    return await aiRecommend(a, courses);
+  }
+  return ruleBasedRecommend(a, courses);
+}
+
+
+/* =====================================================================
+   判定の実行フロー（質問終了 → Firestore取得 → 判定 → 結果表示）
+   ===================================================================== */
+async function runRecommendation(){
+  showScreen('screen-calc');
+  headerTitle.textContent = '判定中';
+  headerSub.textContent = '少々お待ちください';
+  progressFill.style.width = '100%';
+  progressLabel.textContent = '判定中…';
+
+  try{
+    // まだ取得していなければ walking_courses を全件取得する。
+    // ※ コース件数が多くなってきたら where() での事前絞り込みや
+    //    ページングを検討する（現段階は全件取得を想定）。
+    if(allCourses.length === 0){
+      const snap = await db.collection('walking_courses').get();
+      allCourses = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    }
+
+    if(allCourses.length === 0){
+      rankedResults = [];
+    }else{
+      rankedResults = await recommendCourses(answers, allCourses);
+    }
+
+    renderResultScreen();
+  }catch(err){
+    console.error('コース取得・判定に失敗しました', err);
+    showToast('コースの取得に失敗しました');
+    rankedResults = [];
+    renderResultScreen();
+  }
+}
+
+/* =====================================================================
+   結果画面の描画
+   ===================================================================== */
+function renderResultScreen(){
+  headerTitle.textContent = 'おすすめコース';
+  headerSub.textContent = '気になるコースをタップして詳細を見よう';
+  progressTrack.style.display = 'none';
+  progressLabel.style.display = 'none';
+
+  if(rankedResults.length === 0){
+    resultList.innerHTML = `<div class="empty-result">条件に合うコースが見つかりませんでした。<br>質問の内容を変えて、もう一度お試しください。</div>`;
+    showScreen('screen-result');
+    return;
+  }
+
+  resultList.innerHTML = rankedResults.map(({course, score}, i) => {
+    return renderCourseCard(course, score, i);
+  }).join('');
+
+  // カード全体クリック → 詳細画面へ
+  rankedResults.forEach(({course}, i) => {
+    const el = document.getElementById('course-card-' + i);
+    if(el){
+      el.addEventListener('click', () => openDetail(course));
+    }
+  });
+
+  showScreen('screen-result');
+}
+
+/* 星評価：スコア(0-100)を5段階の★に変換 */
+function scoreToStars(score){
+  return Math.max(1, Math.round(score / 20)); // 20点=1つ星
+}
+
+function renderStars(score){
+  const filled = scoreToStars(score);
+  let html = '';
+  for(let i=1;i<=5;i++){
+    const on = i <= filled;
+    html += `<svg viewBox="0 0 24 24" fill="${on ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="1.6" class="${on ? 'star-on' : 'star-off'}"><path d="M12 3l2.5 5.5L20 9l-4 4 1 6-5-3-5 3 1-6-4-4 5.5-.5z"/></svg>`;
+  }
+  return html;
+}
+
+const DIFFICULTY_LABEL = { beginner:'初心者向け', normal:'普通', advanced:'上級者向け' };
+const PURPOSE_LABEL = {
+  health:'健康', garbage:'ゴミ拾い', sightseeing:'観光', photo:'写真撮影',
+  nature:'自然観察', exercise:'運動', dogwalk:'犬の散歩'
+};
+const SCENERY_LABEL = { sea:'海', river:'川', shrine:'神社', forest:'森林', town:'町並み', flower:'花', autumn:'紅葉' };
+const GARBAGE_LABEL = { none:'ゴミ拾いなし', little:'ゴミ拾い少し', active:'ゴミ拾い積極的' };
+
+function renderCourseCard(course, score, i){
+  const rankLabel = ['1位', '2位', '3位'][i] || `${i+1}位`;
+  const photoHtml = course.photo
+    ? `<img class="course-photo" src="${escapeAttr(course.photo)}" alt="" loading="lazy" onerror="this.outerHTML='<div class=&quot;course-photo noimg&quot;>${iconSvgAttr('leaf')}</div>'">`
+    : `<div class="course-photo noimg">${iconSvg('leaf')}</div>`;
+
+  const sceneryArr = toArray(course.scenery).map(s => SCENERY_LABEL[s] || s);
+
+  return `
+    <div class="course-card" id="course-card-${i}">
+      <div class="rank-tag ${i===0 ? 'top' : ''}">${rankLabel}</div>
+      ${photoHtml}
+      <div class="course-body">
+        <div class="stars">
+          ${renderStars(score)}
+          <span class="match-pct">一致度 ${score}%</span>
+        </div>
+        <div class="course-name">${escapeHtml(course.name || '名称未設定コース')}</div>
+        <div class="course-meta">
+          <div class="meta-chip">${iconSvg('run')}${escapeHtml(String(course.distance ?? '-'))}km</div>
+          <div class="meta-chip">${iconSvg('clock')}${escapeHtml(String(course.time ?? '-'))}分</div>
+          <div class="meta-chip">${DIFFICULTY_LABEL[course.difficulty] || course.difficulty || '-'}</div>
+          ${sceneryArr.slice(0,2).map(s => `<div class="meta-chip">${escapeHtml(s)}</div>`).join('')}
+          ${course.garbage_level ? `<div class="meta-chip garbage">${iconSvg('trashSmall')}${GARBAGE_LABEL[course.garbage_level] || course.garbage_level}</div>` : ''}
+        </div>
+        <div class="course-desc">${escapeHtml(course.description || '')}</div>
+        <button type="button" class="course-cta" data-course-idx="${i}">
+          ${iconSvg('flag')}このコースへ行く
+        </button>
+      </div>
+    </div>
+  `;
+}
+function iconSvgAttr(name){
+  // onerror属性内に埋め込むため、属性用にエスケープ済みのSVG文字列を返す
+  return iconSvg(name).replace(/"/g, '&quot;');
+}
+
+/* 「このコースへ行く」ボタン（カード内）→ 詳細画面へ（イベント委譲） */
+resultList && resultList.addEventListener && resultList.addEventListener('click', (e) => {
+  const btn = e.target.closest('.course-cta');
+  if(!btn) return;
+  e.stopPropagation();
+  const idx = Number(btn.dataset.courseIdx);
+  const item = rankedResults[idx];
+  if(item) openDetail(item.course);
+});
+
+
+/* =====================================================================
+   コース詳細画面
+   ===================================================================== */
+function openDetail(course){
+  selectedCourse = course;
+
+  headerTitle.textContent = 'コース詳細';
+  headerSub.textContent = '';
+
+  const photoWrap = document.getElementById('detailPhotoWrap');
+  photoWrap.innerHTML = course.photo
+    ? `<img class="detail-photo" src="${escapeAttr(course.photo)}" alt="" onerror="this.outerHTML='<div class=&quot;detail-photo noimg&quot;>${iconSvgAttr('leaf')}</div>'">`
+    : `<div class="detail-photo noimg">${iconSvg('leaf')}</div>`;
+
+  document.getElementById('detailName').textContent = course.name || '名称未設定コース';
+  document.getElementById('detailDistance').textContent = (course.distance ?? '-') + 'km';
+  document.getElementById('detailTime').textContent = (course.time ?? '-') + '分';
+  document.getElementById('detailDifficulty').textContent = DIFFICULTY_LABEL[course.difficulty] || course.difficulty || '-';
+  document.getElementById('detailDesc').textContent = course.description || '説明は登録されていません。';
+
+  const chips = [];
+  toArray(course.purpose).forEach(p => chips.push(PURPOSE_LABEL[p] || p));
+  toArray(course.scenery).forEach(s => chips.push(SCENERY_LABEL[s] || s));
+  if(course.garbage_level) chips.push(GARBAGE_LABEL[course.garbage_level] || course.garbage_level);
+  if(course.wheelchair) chips.push('車椅子OK');
+  if(course.dog) chips.push('犬OK');
+  if(course.family) chips.push('家族向け');
+  document.getElementById('detailChips').innerHTML = chips.map(c => `<div class="meta-chip">${escapeHtml(c)}</div>`).join('');
+
+  showScreen('screen-detail');
+}
+
+document.getElementById('startNavBtn').addEventListener('click', () => {
+  if(selectedCourse) openNav(selectedCourse);
+});
+
+
+/* =====================================================================
+   ナビ開始画面（Leaflet：ルート表示・GPS現在地表示）
+   ===================================================================== */
+const navBackBtn   = document.getElementById('navBackBtn');
+const navHeaderTitle = document.getElementById('navHeaderTitle');
+const navSheetName = document.getElementById('navSheetName');
+const navSheetMeta = document.getElementById('navSheetMeta');
+const gpsToggleBtn = document.getElementById('gpsToggleBtn');
+const gpsBadge      = document.getElementById('gpsBadge');
+const gpsBadgeText  = document.getElementById('gpsBadgeText');
+const locateFab     = document.getElementById('locateFab');
+
+function openNav(course){
+  navHeaderTitle.textContent = course.name || 'ナビ開始';
+  navSheetName.textContent = course.name || '';
+  navSheetMeta.textContent = `距離 ${course.distance ?? '-'}km ／ 所要時間 ${course.time ?? '-'}分`;
+
+  showScreen('screen-nav');
+
+  // Leaflet地図の初期化は初回のみ（以降は既存インスタンスを再利用）
+  if(!navMap){
+    navMap = L.map('navMap', { zoomControl:false, attributionControl:true });
+    L.control.zoom({ position:'bottomright' }).addTo(navMap);
+    // 地理院タイル（まちみっけ／トレジャーシーカー伊勢の既存実装と同じソース）
+    L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png', {
+      maxZoom: 18,
+      attribution: '地理院タイル'
+    }).addTo(navMap);
+  }else{
+    // 前回のルートを消去してから再描画する
+    if(navRouteLayer){ navMap.removeLayer(navRouteLayer); navRouteLayer = null; }
+  }
+
+  drawCourseRoute(course);
+  stopGpsWatch(); // 別コースを開いたら一旦GPSはリセット
+}
+
+/**
+ * コースのルート・スタート／ゴール地点を地図に描画する。
+ * Firestoreの route フィールドは [{lat, lng}, ...] を想定。
+ * route が無い場合は latitude/longitude（1点）のみをマーカー表示する。
+ */
+function drawCourseRoute(course){
+  const points = [];
+
+  if(Array.isArray(course.route) && course.route.length > 0){
+    course.route.forEach(p => {
+      if(typeof p.lat === 'number' && typeof p.lng === 'number'){
+        points.push([p.lat, p.lng]);
+      }
+    });
+  }
+
+  if(points.length >= 2){
+    navRouteLayer = L.layerGroup().addTo(navMap);
+    const line = L.polyline(points, { color:'#3E6B4F', weight:5, opacity:0.85 }).addTo(navRouteLayer);
+
+    const startIcon = makeDivIcon('#B5502F', 'S');
+    const goalIcon   = makeDivIcon('#3E6B4F', 'G');
+    L.marker(points[0], { icon:startIcon }).addTo(navRouteLayer).bindPopup(course.start || 'スタート');
+    L.marker(points[points.length - 1], { icon:goalIcon }).addTo(navRouteLayer).bindPopup(course.goal || 'ゴール');
+
+    navMap.fitBounds(line.getBounds(), { padding:[40, 120] });
+  }else if(typeof course.latitude === 'number' && typeof course.longitude === 'number'){
+    navRouteLayer = L.layerGroup().addTo(navMap);
+    L.marker([course.latitude, course.longitude], { icon: makeDivIcon('#B5502F', 'S') })
+      .addTo(navRouteLayer)
+      .bindPopup(course.name || 'コース地点');
+    navMap.setView([course.latitude, course.longitude], 16);
+  }else{
+    // 位置情報が全く無い場合は伊勢市周辺をデフォルト表示
+    navMap.setView([34.489, 136.709], 13);
+    showToast('このコースには位置情報が登録されていません');
+  }
+
+  // Leafletはdisplay:noneの状態でinvalidateSizeせずに描画すると
+  // タイルが崩れるため、画面表示後にサイズを再計算する。
+  setTimeout(() => navMap && navMap.invalidateSize(), 80);
+}
+
+function makeDivIcon(color, letter){
+  return L.divIcon({
+    className:'',
+    html:`<div style="width:26px;height:26px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:${color};display:flex;align-items:center;justify-content:center;box-shadow:0 3px 8px rgba(0,0,0,0.3);">
+            <span style="transform:rotate(45deg);color:#fff;font-size:11px;font-weight:700;">${letter}</span>
+          </div>`,
+    iconSize:[26,26],
+    iconAnchor:[13,26]
+  });
+}
+
+/* ---- GPS現在地表示 ---- */
+function startGpsWatch(){
+  if(!navigator.geolocation){
+    showToast('この端末は位置情報に対応していません');
+    return;
+  }
+  gpsActive = true;
+  gpsBadge.className = 'gps-badge searching';
+  gpsBadgeText.textContent = '位置情報を取得中…';
+  gpsToggleBtn.innerHTML = `${iconSvg('x')}GPSを停止する`;
+
+  watchId = navigator.geolocation.watchPosition(
+    (pos) => {
+      const { latitude, longitude, accuracy } = pos.coords;
+      gpsBadge.className = 'gps-badge';
+      gpsBadgeText.textContent = '現在地を表示中';
+
+      if(!userMarker){
+        userMarker = L.circleMarker([latitude, longitude], {
+          radius:8, color:'#fff', weight:3, fillColor:'#2C4E3A', fillOpacity:1
+        }).addTo(navMap);
+        navMap.setView([latitude, longitude], 17);
+      }else{
+        userMarker.setLatLng([latitude, longitude]);
+      }
+    },
+    (err) => {
+      console.warn('GPS取得エラー', err);
+      gpsBadge.className = 'gps-badge off';
+      gpsBadgeText.textContent = 'GPS取得に失敗しました';
+      showToast('位置情報を取得できませんでした。設定をご確認ください。');
+    },
+    { enableHighAccuracy:true, maximumAge:3000, timeout:10000 }
+  );
+}
+
+function stopGpsWatch(){
+  gpsActive = false;
+  if(watchId !== null && navigator.geolocation){
+    navigator.geolocation.clearWatch(watchId);
+    watchId = null;
+  }
+  if(userMarker){ navMap && navMap.removeLayer(userMarker); userMarker = null; }
+  gpsBadge.className = 'gps-badge off';
+  gpsBadgeText.textContent = 'GPS停止中';
+  gpsToggleBtn.innerHTML = `${iconSvg('run')}GPSを開始する`;
+}
+
+gpsToggleBtn.addEventListener('click', () => {
+  if(gpsActive){ stopGpsWatch(); } else { startGpsWatch(); }
+});
+
+locateFab.addEventListener('click', () => {
+  if(userMarker){
+    navMap.setView(userMarker.getLatLng(), 17);
+  }else{
+    showToast('先にGPSを開始してください');
+  }
+});
+
+navBackBtn.addEventListener('click', () => {
+  stopGpsWatch();
+  showScreen('screen-detail');
+});
+
+
+/* =====================================================================
+   共通ユーティリティ（XSS対策のエスケープ）
+   ===================================================================== */
+function escapeHtml(str){
+  return String(str ?? '').replace(/[&<>"']/g, s => ({
+    '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
+  }[s]));
+}
+function escapeAttr(str){ return escapeHtml(str); }
+
+
+/* =====================================================================
+   認証チェック（home.htmlと同じ方式：未ログインならlogin.htmlへ）
+   ===================================================================== */
+let authResolved = false;
+auth.onAuthStateChanged((user) => {
+  if(authResolved) return;
+  authResolved = true;
+
+  if(!user){
+    window.location.href = LOGIN_PAGE;
+    return;
+  }
+  currentUser = user;
+
+  overlay.style.opacity = '0';
+  setTimeout(() => overlay.style.display = 'none', 350);
+
+  renderQuestion(); // 初回描画：質問1を表示
+});
+</script>
+</body>
+</html>
