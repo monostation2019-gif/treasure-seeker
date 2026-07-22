@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>トレジャーシーカー伊勢 | AIおすすめウォーキング</title>
+<title>トレジャーシーカー伊勢 | ウォーキング診断</title>
 
 <!-- ================================================================
      Firebase（home.html / login.html と同一設定）
@@ -378,7 +378,7 @@
   }
   .detail-tags{ display:flex; flex-wrap:wrap; gap:8px; }
 
-  /* ---------- 詳細画面：ここナビ／アプリ地図で見る ボタン ---------- */
+  /* ---------- 詳細画面：ここナビ／伊勢市公式コース情報 ボタン ---------- */
   .nav-action-row{
     display:flex; flex-direction:column; gap:10px;
     margin-top:20px;
@@ -387,6 +387,35 @@
     background:var(--card);
     color:var(--forest-deep);
     border:1.5px solid var(--forest);
+  }
+
+  /* ---------- 詳細画面：ナビ導線ボタンの上の注意書き ---------- */
+  .caution-note{
+    display:flex;
+    align-items:flex-start;
+    gap:8px;
+    margin-top:20px;
+    padding:12px 14px;
+    background:#FBF1E6;
+    border:1px solid rgba(181,80,47,0.28);
+    border-radius:14px;
+  }
+  .caution-note .caution-ico{
+    flex-shrink:0;
+    font-size:14px;
+    line-height:1.5;
+  }
+  .caution-note p{
+    margin:0;
+    font-size:11.5px;
+    line-height:1.65;
+    color:var(--ink);
+  }
+  .caution-note p strong{
+    display:block;
+    font-size:12px;
+    color:var(--torii);
+    margin-bottom:3px;
   }
 
   .toast{
@@ -434,7 +463,7 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
       </div>
       <div>
-        <div class="header-title" id="headerTitle">AIおすすめウォーキング</div>
+        <div class="header-title" id="headerTitle">ウォーキング診断</div>
         <div class="header-sub" id="headerSub">質問に答えてぴったりのコースを見つけよう</div>
       </div>
     </div>
@@ -522,17 +551,21 @@
            ・「ここナビで開く」= map.html の popup と同じ Google Maps
              ディレクション（https://www.google.com/maps/dir/?api=1&destination=…）
              を新規タブで開く。実際の道案内はGoogleマップに任せる。
-           ・「アプリ地図で見る」= map.html が既に対応している
-             ?lat=..&lng=.. ジャンプ機能を使って、クリーンマップ上で
-             位置を確認できるようにする（同じLeafletインスタンスを再利用）。 -->
+           ・「伊勢市公式コース情報(PDF)を見る」= course.sourceUrl（伊勢市公式サイトの
+             コースPDF）を新規タブで開く。座標や住所から作った目的地は
+             ズレている場合があるため、公式一次情報へ直接誘導する。 -->
+      <div class="caution-note">
+        <span class="caution-ico">⚠️</span>
+        <p><strong>ご利用前にご確認ください</strong>道路状況、施設の営業状況、通行規制などは変更される場合があります。実際に利用する際は、現地の案内や最新の公式情報をご確認ください。</p>
+      </div>
       <div class="nav-action-row">
         <button class="btn btn-primary btn-full" id="openGoogleMapsBtn">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l19-9-9 19-2-8-8-2z"/></svg>
           ここナビで行く（Googleマップ）
         </button>
         <button class="btn btn-outline btn-full" id="openAppMapBtn">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 20l-6-3V4l6 3 6-3 6 3v13l-6-3-6 3z"/><path d="M9 7v13M15 4v13"/></svg>
-          アプリ地図で見る
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3v5h5M9 13h6M9 17h6M9 9h1"/><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/></svg>
+          伊勢市公式コース情報(PDF)を見る
         </button>
       </div>
     </section>
@@ -724,7 +757,7 @@ function showToast(msg){
 function renderQuestion(){
   const q = QUESTIONS[currentQIndex];
 
-  headerTitle.textContent = 'AIおすすめウォーキング';
+  headerTitle.textContent = 'ウォーキング診断';
   headerSub.textContent = '質問に答えてぴったりのコースを見つけよう';
   progressTrack.style.display = '';
   progressLabel.style.display = '';
@@ -1523,16 +1556,13 @@ document.getElementById('openGoogleMapsBtn').addEventListener('click', () => {
 
 document.getElementById('openAppMapBtn').addEventListener('click', () => {
   if(!selectedCourse) return;
-  const dest = getCourseDestination(selectedCourse);
-  // アプリ内マップ（map.html）は緯度経度でのマーカー表示にのみ対応。
-  // 住所文字列しかないコース（多くの市公式コース）はGoogleマップ側に誘導する。
-  if(!dest || typeof dest.lat !== 'number'){
-    showToast('このコースはGoogleマップでご確認ください');
+  // 「伊勢市公式コース情報(PDF)を見る」= 診断されたコースの公式PDF（sourceUrl）を
+  // 新規タブで開く。sourceUrlが無いコースはその旨をトーストで案内する。
+  if(!selectedCourse.sourceUrl){
+    showToast('このコースの公式コース情報は登録されていません');
     return;
   }
-  // map.html は ?lat=..&lng=.. を受け取ると、その地点へ地図を移動して
-  // マーカーでハイライトする処理を既に持っている（履歴ページからの遷移と同じ仕組み）。
-  window.location.href = `map.html?lat=${dest.lat}&lng=${dest.lng}`;
+  window.open(selectedCourse.sourceUrl, '_blank', 'noopener');
 });
 
 
