@@ -50,7 +50,7 @@
   /* ---------- Header ---------- */
   header{
     background:linear-gradient(155deg, var(--forest) 0%, var(--forest-deep) 100%);
-    padding:calc(env(safe-area-inset-top,0px) + 18px) 20px 22px;
+    padding:calc(env(safe-area-inset-top,0px) + 18px) 20px 34px;
     border-radius:0 0 26px 26px;
     color:#fff;
     position:relative;
@@ -69,7 +69,14 @@
     font-size:20px;
     margin:0;
   }
-  .header-date{font-size:12px; color:#D8E7DC; margin-top:3px;}
+  .header-date-row{display:flex; align-items:center; gap:10px; margin-top:3px;}
+  .header-date{font-size:12px; color:#D8E7DC;}
+  .header-weather{
+    display:flex; align-items:center; gap:4px;
+    font-size:12px; color:#D8E7DC;
+    white-space:nowrap;
+  }
+  .header-weather .w-icon{font-size:14px; line-height:1;}
 
   .icon-btn{
     width:34px; height:34px;
@@ -103,7 +110,7 @@
     background:var(--card);
     border-radius:20px;
     padding:18px;
-    margin-top:-28px;
+    margin-top:-20px;
     position:relative;
     z-index:2;
     box-shadow:0 10px 26px rgba(44,78,58,0.12);
@@ -305,7 +312,10 @@
     <div class="header-row">
       <div>
         <h1 id="greeting">ホーム</h1>
-        <div class="header-date" id="todayDate"></div>
+        <div class="header-date-row">
+          <div class="header-date" id="todayDate"></div>
+          <div class="header-weather" id="todayWeather"></div>
+        </div>
       </div>
       <div class="icon-btn" id="logoutBtn" title="ログアウト">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
@@ -359,8 +369,8 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l1.6 5.2L19 9l-5.4 1.8L12 16l-1.6-5.2L5 9l5.4-1.8L12 2z"/><path d="M19 14l.8 2.6L22 17.5l-2.2.9L19 21l-.8-2.6L16 17.5l2.2-.9L19 14z"/></svg>
       </div>
       <div class="ai-text">
-        <div class="ai-title">AIおすすめコース <span class="ai-badge">NEW</span></div>
-        <div class="ai-desc">かんたんな質問に答えるだけで、ぴったりのコースを提案</div>
+        <div class="ai-title">ウォーキングおすすめコース診断 <span class="ai-badge">NEW</span></div>
+        <div class="ai-desc">かんたんな質問に答えるだけで、あなたにぴったりのコースを診断</div>
       </div>
       <div class="ai-arrow">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
@@ -424,6 +434,37 @@ function formatToday(){
   return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日（${w}）`;
 }
 todayDateEl.textContent = formatToday();
+
+const todayWeatherEl = document.getElementById('todayWeather');
+
+// 天気アイコン（Open-Meteo の weathercode を絵文字に変換）
+function weatherEmoji(code){
+  if (code === 0) return '☀️';
+  if ([1,2].includes(code)) return '🌤️';
+  if (code === 3) return '☁️';
+  if ([45,48].includes(code)) return '🌫️';
+  if ([51,53,55,56,57,61,63,65,66,67,80,81,82].includes(code)) return '🌧️';
+  if ([71,73,75,77,85,86].includes(code)) return '❄️';
+  if ([95,96,99].includes(code)) return '⛈️';
+  return '🌡️';
+}
+
+// 伊勢市の座標で現在の気象を自動取得（位置情報の許可は不要）
+async function loadWeather(){
+  try{
+    const lat = 34.4907, lon = 136.7096; // 伊勢市
+    const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`);
+    if(!res.ok) throw new Error('weather fetch failed');
+    const data = await res.json();
+    const cw = data.current_weather;
+    if(!cw) return;
+    todayWeatherEl.innerHTML = `<span class="w-icon">${weatherEmoji(cw.weathercode)}</span><span>${Math.round(cw.temperature)}℃</span>`;
+  }catch(e){
+    // 取得失敗時は表示しない（レイアウトは崩さない）
+    todayWeatherEl.textContent = '';
+  }
+}
+loadWeather();
 
 function startOfToday(){
   const d = new Date();
